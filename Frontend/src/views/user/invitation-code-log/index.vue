@@ -1,0 +1,81 @@
+<template>
+  <div class="app-container">
+    <div class="df aic mb20" v-if="device==='desktop'">
+      <el-popover class="mlr10" placement="bottom" trigger="click">
+        <ProForm ref="searchForm" :config="SFC"></ProForm>
+        <el-button type="primary" @click="onSearch('InvitationCodeLog')">{{$t('common.confirm')}}</el-button>
+        <el-button type="primary" icon="el-icon-search" slot="reference">{{ $t('common.search') }}</el-button>
+      </el-popover>
+      <el-button type="primary" icon="el-icon-refresh" plain @click="getList('InvitationCodeLog')"></el-button>
+      <el-form label-suffix="：" inline class="ml20">
+        <el-form-item :label="$t('invitationCodeLog.totalCoin')">{{ summary.total_coin }}</el-form-item>
+        <el-form-item :label="$t('invitationCodeLog.totalDiamond')">{{ summary.total_diamond }}</el-form-item>
+      </el-form>
+    </div>
+    <div class="df aic mb20" v-else>
+      <el-popover class="mlr10" placement="bottom" trigger="click">
+        <ProForm ref="searchForm" :config="SFC"></ProForm>
+        <el-button type="primary" @click="onSearch('InvitationCodeLog')">{{$t('common.confirm')}}</el-button>
+        <el-button type="primary" icon="el-icon-search" slot="reference"></el-button>
+      </el-popover>
+      <el-button type="primary" icon="el-icon-refresh" plain @click="getList('InvitationCodeLog')"></el-button>
+    </div>
+
+    <ProTable index border :is-loading="isLoading" :data="list" :page="page" :column="column"
+      :column-attr="{ code: { minWidth: '120px' }, user_id: { minWidth: '80px' }, user_email: { minWidth: '180px' }, used_at: { minWidth: '150px' } }"
+      @page-change="onPageChange('InvitationCodeLog', $event)">
+    </ProTable>
+  </div>
+</template>
+
+<script>
+import api from '@/api'
+import { invitationCodeLog } from '@/form'
+import paging from '@/mixins/paging'
+export default {
+  name: 'InvitationCodeLog',
+  mixins: [paging],
+  data() {
+    return {
+      SFC: invitationCodeLog,
+      summary: { total_coin: '0.00', total_diamond: '0.00' },
+      column: {
+        log_id: 'invitationCodeLog.logId',
+        code: 'invitationCodeLog.code',
+        user_id: 'invitationCodeLog.userId',
+        user_name: 'invitationCodeLog.userName',
+        user_phone: 'common.tel',
+        user_email: 'common.email',
+        reward_coin: 'invitationCodeLog.rewardCoin',
+        reward_diamond: 'invitationCodeLog.rewardDiamond',
+        user_balance: 'invitationCodeLog.balance',
+        used_at: 'invitationCodeLog.usedAt',
+      }
+    }
+  },
+  created() {
+    this.getList('InvitationCodeLog')
+  },
+  methods: {
+    // 覆写 paging 的 getList，额外取合计奖励
+    async getList(name, { page = 1, limit = 10, ...elseParams } = {}) {
+      try {
+        this.isLoading = true
+        const { results } = await api.reqInvitationCodeLog({ page, limit, ...elseParams })
+        this.list = results.data || []
+        this.page.current = page
+        this.page.size = limit
+        this.page.total = results.count || 0
+        this.summary = {
+          total_coin: results.total_coin || '0.00',
+          total_diamond: results.total_diamond || '0.00'
+        }
+      } catch (error) {
+        console.log(error)
+      } finally {
+        this.isLoading = false
+      }
+    }
+  }
+}
+</script>

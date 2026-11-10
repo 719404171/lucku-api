@@ -1,0 +1,73 @@
+<?php
+/*
+ * File: messages.php
+ * Created Time: 2023-11-27 10:33:56 am
+ * Author: Wang Yu Qiang (719404171@qq.com)
+ * -----
+ * Last Modified: 2026-06-04 9:42:03 am
+ * Modified By: WangYuQiang (719404171@qq.com>)
+ * -----
+ * Copyright 2023 - 2023 Brainstorm Ltd, 成都睿创科技有限公司
+ */
+return [
+    'registert_success' => '注册成功 ！！',
+    'register_fail' => '注册失败 ！！',
+    'user_exist' => '用户已存在 ！！',
+    'user_notexist' => '用户不存在 ！！',
+    'email_exist' => '电邮已存在 ！！',
+    'email_notexist' => '电邮不存在 ！！',
+    'phone_exist' => '手机号码已存在 ！！',
+    'phone_notexist' => '手机号码不存在 ！！',
+    'email_missing' => '电邮未输入 ！！',
+    'phone_missing' => '手机号未输入 ！！',
+    'password_missing' => '密码未输入 ！！',
+    'no_login' => '用户未登录 ！！',
+    'list_success' => '获取列表成功 ！！',
+    'list_fail' => '获取列表失败 ！！',
+    'list_null' => '暂无数据 ！！',
+    'edit_success' => '修改成功 ！！',
+    'edit_fail' => '修改失败 ！！',
+    'add_success' => '新增成功 ！！',
+    'add_fail' => '新增失败 ！！',
+    'delete_success' => '删除成功 ！！',
+    'delete_fail' => '删除失败 ！！',
+    'verify_success' => '验证成功 ！！',
+    'verify_fail' => '验证失败 ！！',
+    'set_success' => '设置成功 ！！',
+    'set_fail' => '设置失败 ！！',
+    'param_error' => '参数错误 ！！',
+    'draw_need_locked_preset' => '请先在「抽卡预设」中保存并锁定该卡池的预设，才能开启抽卡入口 ！！',
+    'param_missing' => '缺少参数 ！！',
+    'login_success' => '登录成功！！',
+    'login_error' => '用户名或密码错误！！',
+    'old_password_error' => '原密码错误！！',
+    'password_too_short' => '新密码长度不能少于6位！！',
+    'network_error' => '网络错误，请重试 ！！',
+    'picture_success' => '图片上传成功 ！！',
+    'picture_error' => '图片上传失败，请重试 ！！',
+    'only_one' => '只能添加一个 ！！',
+    'info_success' => '获取信息成功 ！！',
+    'info_fail' => '获取信息失败 ！！',
+    'success' => '成功 ！！',
+    'existingUsers' => '该角色下存在用户，不可删除 ！！',
+    'existingProduct' => '该分类下存在产品，不可禁用或删除 ！！',
+    'name_duplication' => '名称重复 ！！',
+    'no_contact' => '没有联系方式 ！！',
+    'email_sending_failed' => '邮箱发送失败 ！！',
+    'email_sending_success' => '邮箱发送成功 ！！',
+    'procurement_notice' => '采购通知 ！！',
+    'purchasing_name' => '采购姓名',
+    'purchasing_products' => '采购产品',
+    'purchasing_products_specs' => '采购产品规格',
+    'purchase_quantity' => '采购数量',
+    'procurement_remarks' => '采购备注',
+    'do_not_reply' => '该邮件为系统发送，请勿进行回复',
+    'procurement_information' => '您有新的采购信息，请及时处理',
+    'push_user_not_client_id' => '该用户没有推送配置，请该用户登录后再试',
+    'push_not_user' => '没有可推送的用户',
+    'push_success' => '推送成功',
+    'push_fail' => '推送失败',
+    'operation_success' => '操作成功！！',
+    'null' => '数据不存在！！',
+    'already_processed' => '该退款申请已处理，请勿重复操作！！',
+];

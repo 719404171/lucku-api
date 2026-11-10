@@ -1,0 +1,1020 @@
+{
+    "areas": [
+        {
+            "id": 1,
+            "zh_name": "港岛",
+            "en_name": "hong kong"
+        },
+        {
+            "id": 2,
+            "zh_name": "九龙",
+            "en_name": "kowloon"
+        },
+        {
+            "id": 3,
+            "zh_name": "新界",
+            "en_name": "new territories"
+        }
+    ],
+    "districts": [
+        {
+            "id": 1,
+            "zh_name": "中西区",
+            "en_name": "central and western",
+            "parent_id": 1
+        },
+        {
+            "id": 2,
+            "zh_name": "湾仔",
+            "en_name": "wan chai",
+            "parent_id": 1
+        },
+        {
+            "id": 3,
+            "zh_name": "东区",
+            "en_name": "eastern",
+            "parent_id": 1
+        },
+        {
+            "id": 4,
+            "zh_name": "南区",
+            "en_name": "southern",
+            "parent_id": 1
+        },
+        {
+            "id": 5,
+            "zh_name": "油尖旺",
+            "en_name": "yau tsim mong",
+            "parent_id": 2
+        },
+        {
+            "id": 6,
+            "zh_name": "深水埗",
+            "en_name": "sham shui po",
+            "parent_id": 2
+        },
+        {
+            "id": 7,
+            "zh_name": "九龙城",
+            "en_name": "kowloon city",
+            "parent_id": 2
+        },
+        {
+            "id": 8,
+            "zh_name": "黄大仙",
+            "en_name": "wong tai sin",
+            "parent_id": 2
+        },
+        {
+            "id": 9,
+            "zh_name": "观塘",
+            "en_name": "kwun tong",
+            "parent_id": 2
+        },
+        {
+            "id": 10,
+            "zh_name": "葵青",
+            "en_name": "kwai tsing",
+            "parent_id": 3
+        },
+        {
+            "id": 11,
+            "zh_name": "荃湾",
+            "en_name": "tsuen wan",
+            "parent_id": 3
+        },
+        {
+            "id": 12,
+            "zh_name": "屯门",
+            "en_name": "tuen mun",
+            "parent_id": 3
+        },
+        {
+            "id": 13,
+            "zh_name": "元朗",
+            "en_name": "yuen long",
+            "parent_id": 3
+        },
+        {
+            "id": 14,
+            "zh_name": "北区",
+            "en_name": "north",
+            "parent_id": 3
+        },
+        {
+            "id": 15,
+            "zh_name": "大埔",
+            "en_name": "tai po",
+            "parent_id": 3
+        },
+        {
+            "id": 16,
+            "zh_name": "沙田",
+            "en_name": "sha tin",
+            "parent_id": 3
+        },
+        {
+            "id": 17,
+            "zh_name": "西贡",
+            "en_name": "sai kung",
+            "parent_id": 3
+        },
+        {
+            "id": 18,
+            "zh_name": "离岛",
+            "en_name": "islands",
+            "parent_id": 3
+        }
+    ],
+    "blocks": [
+        {
+            "id": 1,
+            "zh_name": "坚尼地城",
+            "en_name": "kennedy town",
+            "d_id": 1,
+            "a_id": 1
+        },
+        {
+            "id": 2,
+            "zh_name": "石塘咀",
+            "en_name": "shek tong tsui",
+            "d_id": 1,
+            "a_id": 1
+        },
+        {
+            "id": 3,
+            "zh_name": "西营盘",
+            "en_name": "sai ying pun",
+            "d_id": 1,
+            "a_id": 1
+        },
+        {
+            "id": 4,
+            "zh_name": "上环",
+            "en_name": "sheung wan",
+            "d_id": 1,
+            "a_id": 1
+        },
+        {
+            "id": 5,
+            "zh_name": "中环",
+            "en_name": "central",
+            "d_id": 1,
+            "a_id": 1
+        },
+        {
+            "id": 6,
+            "zh_name": "金钟",
+            "en_name": "admiralty",
+            "d_id": 1,
+            "a_id": 1
+        },
+        {
+            "id": 7,
+            "zh_name": "半山区",
+            "en_name": "mid-levels",
+            "d_id": 1,
+            "a_id": 1
+        },
+        {
+            "id": 8,
+            "zh_name": "山顶",
+            "en_name": "peak",
+            "d_id": 1,
+            "a_id": 1
+        },
+        {
+            "id": 9,
+            "zh_name": "湾仔",
+            "en_name": "wan cha",
+            "d_id": 2,
+            "a_id": 1
+        },
+        {
+            "id": 10,
+            "zh_name": "铜锣湾",
+            "en_name": " causeway bay",
+            "d_id": 2,
+            "a_id": 1
+        },
+        {
+            "id": 11,
+            "zh_name": "跑马地",
+            "en_name": "happy valley",
+            "d_id": 2,
+            "a_id": 1
+        },
+        {
+            "id": 12,
+            "zh_name": "大坑",
+            "en_name": "tai hang",
+            "d_id": 2,
+            "a_id": 1
+        },
+        {
+            "id": 13,
+            "zh_name": "扫杆埔",
+            "en_name": "so kon po",
+            "d_id": 2,
+            "a_id": 1
+        },
+        {
+            "id": 14,
+            "zh_name": "渣甸山",
+            "en_name": "jardine's lookout",
+            "d_id": 2,
+            "a_id": 1
+        },
+        {
+            "id": 15,
+            "zh_name": "天后",
+            "en_name": "tin hau",
+            "d_id": 3,
+            "a_id": 1
+        },
+        {
+            "id": 16,
+            "zh_name": "宝马山",
+            "en_name": "braemar hill",
+            "d_id": 3,
+            "a_id": 1
+        },
+        {
+            "id": 17,
+            "zh_name": "北角",
+            "en_name": "north point",
+            "d_id": 3,
+            "a_id": 1
+        },
+        {
+            "id": 18,
+            "zh_name": "鲗鱼涌",
+            "en_name": "quarry bay",
+            "d_id": 3,
+            "a_id": 1
+        },
+        {
+            "id": 19,
+            "zh_name": "西湾河",
+            "en_name": "西湾河",
+            "d_id": 3,
+            "a_id": 1
+        },
+        {
+            "id": 20,
+            "zh_name": "筲箕湾",
+            "en_name": "shau kei wan",
+            "d_id": 3,
+            "a_id": 1
+        },
+        {
+            "id": 21,
+            "zh_name": "柴湾",
+            "en_name": "chai wan",
+            "d_id": 3,
+            "a_id": 1
+        },
+        {
+            "id": 22,
+            "zh_name": "小西湾",
+            "en_name": "siu sai wan",
+            "d_id": 3,
+            "a_id": 1
+        },
+        {
+            "id": 23,
+            "zh_name": "薄扶林",
+            "en_name": "pok fu lam",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 24,
+            "zh_name": "香港仔",
+            "en_name": "aberdeen",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 25,
+            "zh_name": "鸭脷洲",
+            "en_name": "ap lei chau",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 26,
+            "zh_name": "黄竹坑",
+            "en_name": "wong chuk hang",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 27,
+            "zh_name": "寿臣山",
+            "en_name": "shouson hill",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 28,
+            "zh_name": "浅水湾",
+            "en_name": "repulse bay",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 29,
+            "zh_name": "舂磡角",
+            "en_name": "chung hom kok",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 30,
+            "zh_name": "赤柱",
+            "en_name": " stanley",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 31,
+            "zh_name": "大潭",
+            "en_name": "tai tam",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 32,
+            "zh_name": "石澳",
+            "en_name": "shek o",
+            "d_id": 4,
+            "a_id": 1
+        },
+        {
+            "id": 33,
+            "zh_name": "尖沙咀",
+            "en_name": "tsim sha tsui",
+            "d_id": 5,
+            "a_id": 2
+        },
+        {
+            "id": 34,
+            "zh_name": "油麻地",
+            "en_name": "yau ma tei",
+            "d_id": 5,
+            "a_id": 2
+        },
+        {
+            "id": 35,
+            "zh_name": "西九龙填海区",
+            "en_name": "west kowloon reclama",
+            "d_id": 5,
+            "a_id": 2
+        },
+        {
+            "id": 36,
+            "zh_name": "京士柏",
+            "en_name": "king's park",
+            "d_id": 5,
+            "a_id": 2
+        },
+        {
+            "id": 37,
+            "zh_name": "旺角",
+            "en_name": "mong kok",
+            "d_id": 5,
+            "a_id": 2
+        },
+        {
+            "id": 38,
+            "zh_name": "大角咀",
+            "en_name": "tai kok tsui",
+            "d_id": 5,
+            "a_id": 2
+        },
+        {
+            "id": 39,
+            "zh_name": "美孚",
+            "en_name": "mei foo",
+            "d_id": 6,
+            "a_id": 2
+        },
+        {
+            "id": 40,
+            "zh_name": "荔枝角",
+            "en_name": "lai chi kok",
+            "d_id": 6,
+            "a_id": 2
+        },
+        {
+            "id": 41,
+            "zh_name": "长沙湾",
+            "en_name": "cheung sha wan",
+            "d_id": 6,
+            "a_id": 2
+        },
+        {
+            "id": 42,
+            "zh_name": "深水埗",
+            "en_name": "sham shui po",
+            "d_id": 6,
+            "a_id": 2
+        },
+        {
+            "id": 43,
+            "zh_name": "石硖尾",
+            "en_name": " shek kip mei",
+            "d_id": 6,
+            "a_id": 2
+        },
+        {
+            "id": 44,
+            "zh_name": "又一村",
+            "en_name": "yau yat tsuen",
+            "d_id": 6,
+            "a_id": 2
+        },
+        {
+            "id": 45,
+            "zh_name": "大窝坪",
+            "en_name": "tai wo ping",
+            "d_id": 6,
+            "a_id": 2
+        },
+        {
+            "id": 46,
+            "zh_name": "昂船洲",
+            "en_name": "stonecutters island",
+            "d_id": 6,
+            "a_id": 2
+        },
+        {
+            "id": 47,
+            "zh_name": "红磡",
+            "en_name": "hung hom",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 48,
+            "zh_name": "土瓜湾",
+            "en_name": "to kwa wan",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 49,
+            "zh_name": "马头角",
+            "en_name": "ma tau kok",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 50,
+            "zh_name": "马头围",
+            "en_name": "ma tau wai",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 51,
+            "zh_name": "启德",
+            "en_name": "kai tak",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 52,
+            "zh_name": "九龙城",
+            "en_name": "kowloon city",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 53,
+            "zh_name": "何文田",
+            "en_name": "ho man tin",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 54,
+            "zh_name": "九龙塘",
+            "en_name": "kowloon tong",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 55,
+            "zh_name": "笔架山",
+            "en_name": "beacon hill",
+            "d_id": 7,
+            "a_id": 2
+        },
+        {
+            "id": 56,
+            "zh_name": "新蒲岗",
+            "en_name": "san po kong",
+            "d_id": 8,
+            "a_id": 2
+        },
+        {
+            "id": 57,
+            "zh_name": "黄大仙",
+            "en_name": "wong tai sin",
+            "d_id": 8,
+            "a_id": 2
+        },
+        {
+            "id": 58,
+            "zh_name": "东头",
+            "en_name": "tung tau",
+            "d_id": 8,
+            "a_id": 2
+        },
+        {
+            "id": 59,
+            "zh_name": "横头磡",
+            "en_name": "wang tau hom",
+            "d_id": 8,
+            "a_id": 2
+        },
+        {
+            "id": 60,
+            "zh_name": "乐富",
+            "en_name": "lok fu",
+            "d_id": 8,
+            "a_id": 2
+        },
+        {
+            "id": 61,
+            "zh_name": "钻石山",
+            "en_name": "diamond hill",
+            "d_id": 8,
+            "a_id": 2
+        },
+        {
+            "id": 62,
+            "zh_name": "慈云山",
+            "en_name": "tsz wan shan",
+            "d_id": 8,
+            "a_id": 2
+        },
+        {
+            "id": 63,
+            "zh_name": "牛池湾",
+            "en_name": "ngau chi wan",
+            "d_id": 8,
+            "a_id": 2
+        },
+        {
+            "id": 64,
+            "zh_name": "坪石",
+            "en_name": "ping shek",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 65,
+            "zh_name": "九龙湾",
+            "en_name": " kowloon bay",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 66,
+            "zh_name": "牛头角",
+            "en_name": "ngau tau kok",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 67,
+            "zh_name": "佐敦谷",
+            "en_name": "jordan valley",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 68,
+            "zh_name": "观塘",
+            "en_name": "kwun tong",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 69,
+            "zh_name": "秀茂坪",
+            "en_name": "sau mau ping",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 70,
+            "zh_name": "蓝田",
+            "en_name": "lam tin",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 71,
+            "zh_name": "油塘",
+            "en_name": "yau tong",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 72,
+            "zh_name": "鲤鱼门",
+            "en_name": "lei yue mun",
+            "d_id": 9,
+            "a_id": 2
+        },
+        {
+            "id": 73,
+            "zh_name": "葵涌",
+            "en_name": "kwai chung",
+            "d_id": 10,
+            "a_id": 3
+        },
+        {
+            "id": 74,
+            "zh_name": "青衣",
+            "en_name": "tsing yi",
+            "d_id": 10,
+            "a_id": 3
+        },
+        {
+            "id": 75,
+            "zh_name": "荃湾",
+            "en_name": "tsuen wan",
+            "d_id": 11,
+            "a_id": 3
+        },
+        {
+            "id": 76,
+            "zh_name": "梨木树",
+            "en_name": "lei muk shue",
+            "d_id": 11,
+            "a_id": 3
+        },
+        {
+            "id": 77,
+            "zh_name": "汀九",
+            "en_name": "ting kau",
+            "d_id": 11,
+            "a_id": 3
+        },
+        {
+            "id": 78,
+            "zh_name": "深井",
+            "en_name": "sham tseng",
+            "d_id": 11,
+            "a_id": 3
+        },
+        {
+            "id": 79,
+            "zh_name": "青龙头",
+            "en_name": "tsing lung tau",
+            "d_id": 11,
+            "a_id": 3
+        },
+        {
+            "id": 80,
+            "zh_name": "马湾",
+            "en_name": "ma wan",
+            "d_id": 11,
+            "a_id": 3
+        },
+        {
+            "id": 81,
+            "zh_name": "欣澳",
+            "en_name": "sunny bay",
+            "d_id": 11,
+            "a_id": 3
+        },
+        {
+            "id": 82,
+            "zh_name": "大榄涌",
+            "en_name": "tai lam chung",
+            "d_id": 12,
+            "a_id": 3
+        },
+        {
+            "id": 83,
+            "zh_name": "扫管笏",
+            "en_name": "so kwun wat",
+            "d_id": 12,
+            "a_id": 3
+        },
+        {
+            "id": 84,
+            "zh_name": "屯门",
+            "en_name": "tuen mun",
+            "d_id": 12,
+            "a_id": 3
+        },
+        {
+            "id": 85,
+            "zh_name": "蓝地",
+            "en_name": "lam tei",
+            "d_id": 12,
+            "a_id": 3
+        },
+        {
+            "id": 86,
+            "zh_name": "洪水桥",
+            "en_name": "hung shui kiu",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 87,
+            "zh_name": "厦村",
+            "en_name": "ha tsuen",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 88,
+            "zh_name": "流浮山",
+            "en_name": "lau fau shan",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 89,
+            "zh_name": "天水围",
+            "en_name": "tin shui wai",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 90,
+            "zh_name": "元朗",
+            "en_name": "yuen long",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 91,
+            "zh_name": "新田",
+            "en_name": "san tin",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 92,
+            "zh_name": "落马洲",
+            "en_name": "lok ma chau",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 93,
+            "zh_name": "锦田",
+            "en_name": "kam tin",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 94,
+            "zh_name": "石岗",
+            "en_name": "shek kong",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 95,
+            "zh_name": "八乡",
+            "en_name": "pat heung",
+            "d_id": 13,
+            "a_id": 3
+        },
+        {
+            "id": 96,
+            "zh_name": "粉岭",
+            "en_name": "fanling",
+            "d_id": 14,
+            "a_id": 3
+        },
+        {
+            "id": 97,
+            "zh_name": "联和墟",
+            "en_name": "luen wo hui",
+            "d_id": 14,
+            "a_id": 3
+        },
+        {
+            "id": 98,
+            "zh_name": "上水",
+            "en_name": "sheung shui",
+            "d_id": 14,
+            "a_id": 3
+        },
+        {
+            "id": 99,
+            "zh_name": "石湖墟",
+            "en_name": "shek wu hui",
+            "d_id": 14,
+            "a_id": 3
+        },
+        {
+            "id": 100,
+            "zh_name": "沙头角",
+            "en_name": "sha tau kok",
+            "d_id": 14,
+            "a_id": 3
+        },
+        {
+            "id": 101,
+            "zh_name": "鹿颈",
+            "en_name": "luk keng",
+            "d_id": 14,
+            "a_id": 3
+        },
+        {
+            "id": 102,
+            "zh_name": "乌蛟腾",
+            "en_name": "wu kau tang",
+            "d_id": 14,
+            "a_id": 3
+        },
+        {
+            "id": 103,
+            "zh_name": "大埔墟",
+            "en_name": "tai po market",
+            "d_id": 15,
+            "a_id": 3
+        },
+        {
+            "id": 104,
+            "zh_name": "大埔",
+            "en_name": "tai po",
+            "d_id": 15,
+            "a_id": 3
+        },
+        {
+            "id": 105,
+            "zh_name": "大埔滘",
+            "en_name": "tai po kau",
+            "d_id": 15,
+            "a_id": 3
+        },
+        {
+            "id": 106,
+            "zh_name": "大尾笃",
+            "en_name": "tai mei tuk",
+            "d_id": 15,
+            "a_id": 3
+        },
+        {
+            "id": 107,
+            "zh_name": "船湾",
+            "en_name": "shuen wan",
+            "d_id": 15,
+            "a_id": 3
+        },
+        {
+            "id": 108,
+            "zh_name": "樟木头",
+            "en_name": "cheung muk tau",
+            "d_id": 15,
+            "a_id": 3
+        },
+        {
+            "id": 109,
+            "zh_name": "企岭下",
+            "en_name": "kei ling ha",
+            "d_id": 15,
+            "a_id": 3
+        },
+        {
+            "id": 110,
+            "zh_name": "大围",
+            "en_name": "tai wai",
+            "d_id": 16,
+            "a_id": 3
+        },
+        {
+            "id": 111,
+            "zh_name": "沙田",
+            "en_name": "sha tin",
+            "d_id": 16,
+            "a_id": 3
+        },
+        {
+            "id": 112,
+            "zh_name": "火炭",
+            "en_name": "fo tan",
+            "d_id": 16,
+            "a_id": 3
+        },
+        {
+            "id": 113,
+            "zh_name": "马料水",
+            "en_name": "ma liu shui",
+            "d_id": 16,
+            "a_id": 3
+        },
+        {
+            "id": 114,
+            "zh_name": "乌溪沙",
+            "en_name": "wu kai sha",
+            "d_id": 16,
+            "a_id": 3
+        },
+        {
+            "id": 115,
+            "zh_name": "马鞍山",
+            "en_name": "ma on shan",
+            "d_id": 16,
+            "a_id": 3
+        },
+        {
+            "id": 116,
+            "zh_name": "清水湾",
+            "en_name": "clear water bay",
+            "d_id": 17,
+            "a_id": 3
+        },
+        {
+            "id": 117,
+            "zh_name": "西贡",
+            "en_name": "sai kung",
+            "d_id": 17,
+            "a_id": 3
+        },
+        {
+            "id": 118,
+            "zh_name": "大网仔",
+            "en_name": "tai mong tsai",
+            "d_id": 17,
+            "a_id": 3
+        },
+        {
+            "id": 119,
+            "zh_name": "将军澳",
+            "en_name": "tseung kwan o",
+            "d_id": 17,
+            "a_id": 3
+        },
+        {
+            "id": 120,
+            "zh_name": "坑口",
+            "en_name": "hang hau",
+            "d_id": 17,
+            "a_id": 3
+        },
+        {
+            "id": 121,
+            "zh_name": "调景岭",
+            "en_name": "tiu keng leng",
+            "d_id": 17,
+            "a_id": 3
+        },
+        {
+            "id": 122,
+            "zh_name": "马游塘",
+            "en_name": "ma yau tong",
+            "d_id": 17,
+            "a_id": 3
+        },
+        {
+            "id": 123,
+            "zh_name": "长洲",
+            "en_name": "cheung chau",
+            "d_id": 18,
+            "a_id": 3
+        },
+        {
+            "id": 124,
+            "zh_name": "坪洲",
+            "en_name": "peng chau",
+            "d_id": 18,
+            "a_id": 3
+        },
+        {
+            "id": 125,
+            "zh_name": "大屿山",
+            "en_name": "lantau island",
+            "d_id": 18,
+            "a_id": 3
+        },
+        {
+            "id": 126,
+            "zh_name": "东涌",
+            "en_name": "tung chung",
+            "d_id": 18,
+            "a_id": 3
+        },
+        {
+            "id": 127,
+            "zh_name": "南丫岛",
+            "en_name": "lamma island",
+            "d_id": 18,
+            "a_id": 3
+        }
+    ]
+}

@@ -1,0 +1,70 @@
+<?php
+/*
+ * File: messages.php
+ * Created Time: 2023-11-27 10:33:56 am
+ * Author: Wang Yu Qiang (719404171@qq.com)
+ * -----
+ * Last Modified: 2024-05-30 10:02:54 am
+ * Modified By: Wang Yu Qiang (719404171@qq.com>)
+ * -----
+ * Copyright 2023 - 2023 Brainstorm Ltd, 成都睿創科技有限公司
+ */
+return [
+    'registert_success' => 'registration success ！！',
+    'register_fail' => 'registration failed ！！',
+    'user_exist' => 'The user already exist. ！！',
+    'user_notexist' => 'The user does not exist ！！',
+    'email_exist' => 'Email already exists ！！',
+    'email_notexist' => 'Email does not exist ！！',
+    'phone_exist' => 'Mobile number already exists ！！',
+    'phone_notexist' => "Cell phone number doesn't exist ！！",
+    'email_missing' => 'Email not entered ！！',
+    'phone_missing' => 'The phone number is not entered ！！',
+    'password_missing' => 'Password not entered ！！',
+    'no_login' => 'Loss of login information ！！',
+    'list_success' => 'Get the list successfully ！！',
+    'list_fail' => 'Failed to get list ！！',
+    'list_null' => 'No data ！！',
+    'edit_success' => 'Successfully modified ！！',
+    'edit_fail' => 'Fail to edit ！！',
+    'add_success' => 'Added successfully ！！',
+    'add_fail' => 'Failed to add ！！',
+    'delete_success' => 'successfully deleted ！！',
+    'delete_fail' => 'Failed to delete ！！',
+    'verify_success' => 'verify successfully ！！',
+    'verify_fail' => 'verification failed ！！',
+    'set_success' => 'Setup successful ！！',
+    'set_fail' => 'Setup failed ！！',
+    'param_error' => 'Parameter error ！！',
+    'draw_need_locked_preset' => 'Please save and lock the draw preset for this pack before enabling the draw entry ！！',
+    'param_missing' => 'Missing parameters ！！',
+    'login_success' => 'login successfully！！',
+    'login_error' => 'Incorrect username or password！！',
+    'old_password_error' => 'Incorrect old password！！',
+    'password_too_short' => 'New password must be at least 6 characters！！',
+    'network_error' => 'Network error, please try again ！！',
+    'picture_success' => 'Picture uploaded successfully ！！',
+    'picture_error' => 'Image upload failed, please try again ！！',
+    'only_one' => 'Can only add one ！！',
+    'info_success' => 'Information obtained successfully ！！',
+    'info_fail' => 'Failure to obtain information ！！',
+    'success' => 'Success ！！',
+    'existingUsers' => 'There are users under this role and they cannot be deleted ！！',
+    'existingProduct' => 'There are products in this category that cannot be disabled or deleted ！！',
+    'name_duplication' => 'Duplicate name ！！',
+    'no_contact' => 'No contact information available ！！',
+    'email_sending_failed' => 'Email sending failed ！！',
+    'email_sending_success' => 'Email successfully sent ！！',
+    'procurement_notice' => 'Procurement Notice ！！',
+    'purchasing_name' => 'Purchase Name',
+    'purchasing_products' => 'Purchase products',
+    'purchasing_products_specs' => 'Purchase product specifications',
+    'purchase_quantity' => 'Purchase quantity',
+    'procurement_remarks' => 'Procurement remarks',
+    'do_not_reply' => 'This email was sent by the system, please do not reply',
+    'procurement_information' => 'You have new procurement information, please handle it promptly',
+    'push_user_not_client_id' => 'This user does not have a push configuration. Please log in and try again',
+    'push_not_user' => 'There are no users to push to',
+    'push_success' => 'Push successful',
+    'push_fail' => 'Push failed',
+];
