@@ -635,6 +635,19 @@ class Card extends Base
     {
         DB::beginTransaction();
         try {
+            // ---- 額外獎勵：卡池全局第 N 張觸發 ----
+            // 與扣款/扣庫存同事務：drawn_total 自增與 bonus 發放一起成敗
+            // 但獎勵卡庫存不足時跳過（不影響付費抽卡），只寫 log 記錄
+            $bonusCards = [];
+            try {
+                $bonusCards = $this->triggerSortBonusRulesTx($userId, $cardSortId, $count);
+            } catch (\Throwable $e) {
+                // bonus 邏輯異常不能讓整筆抽卡失敗，記日誌後繼續
+                \Log::warning('triggerSortBonusRulesTx exception', [
+                    'user_id' => $userId, 'card_sort_id' => $cardSortId, 'error' => $e->getMessage(),
+                ]);
+            }
+
             // F-12 行鎖校驗錢包餘額，防止並發超扣
             $lockedUser = User::where('user_id', $userId)
                 ->lockForUpdate()
@@ -792,11 +805,173 @@ class Card extends Base
             ]);
 
             DB::commit();
+            // 獎勵卡已在事務內扣庫存並寫入 log，合併進返回數組 + 回填 draw_task_id
+            if (!empty($bonusCards)) {
+                // 把已寫入的 bonus_log（draw_task_id 當初預留 0）回填本次 task_id
+                $ruleIds = array_values(array_unique(array_column($bonusCards, 'bonus_rule_id')));
+                if (!empty($ruleIds) && self::hasTableCached('card_sort_bonus_log')) {
+                    DB::table('card_sort_bonus_log')
+                        ->where('card_sort_id', $cardSortId)
+                        ->whereIn('rule_id', $ruleIds)
+                        ->where('user_id', $userId)
+                        ->where('draw_task_id', 0)
+                        ->update(['draw_task_id' => (int)$taskId, 'updated_at' => $now]);
+                }
+                $cards = array_merge($cards, $bonusCards);
+            }
             return ['ok' => true, 'cards' => $cards, 'task_id' => (int)$taskId];
         } catch (\Throwable $e) {
             DB::rollBack();
             return ['ok' => false, 'msg' => $e->getMessage()];
         }
+    }
+
+    /**
+     * 卡池額外獎勵觸發（在已經開啟的 DB 事務內執行）
+     * 邏輯：
+     *  1. 原子自增 card_sort.drawn_total（全局已抽張數計數器）
+     *  2. 根據 before/after 區間計算本次跨越了哪些觸發點
+     *  3. 對每個 (規則, 觸發點) 寫 bonus_log（唯一鍵實現全局只發一次）
+     *  4. 成功寫入且獎勵卡有庫存 → 扣庫存 + 返回卡信息
+     *  5. 獎勵卡庫存不足 → 僅記 remark，不回滾事務
+     * @return array<int, array> 獎勵卡數組（帶 is_bonus / bonus_position 標記），為空則無獎勵
+     */
+    private function triggerSortBonusRulesTx(int $userId, int $cardSortId, int $count): array
+    {
+        if ($count <= 0) {
+            return [];
+        }
+        // 功能關閉守衛：新列/新表不存在時整體跳過，不影響既有抽卡
+        $hasDrawnTotal = self::hasColumnCached('card_sort', 'drawn_total');
+        $hasRuleTable = self::hasTableCached('card_sort_bonus_rule');
+        $hasLogTable = self::hasTableCached('card_sort_bonus_log');
+        if (!$hasDrawnTotal || !$hasRuleTable || !$hasLogTable) {
+            return [];
+        }
+
+        // 原子自增 drawn_total 並取回自增後值（LAST_INSERT_ID 無需 SELECT 鎖行）
+        $affected = DB::statement(
+            'UPDATE card_sort SET drawn_total = LAST_INSERT_ID(GREATEST(drawn_total, 0) + ?) WHERE card_sort_id = ?',
+            [$count, $cardSortId]
+        );
+        // 使用另一條連接的 LAST_INSERT_ID 不可靠，改為讀回最新值
+        $after = (int)DB::table('card_sort')->where('card_sort_id', $cardSortId)->value('drawn_total');
+        if ($affected === false) {
+            // 自增失敗（卡池不存在等），回寫 0 後直接返回
+            DB::table('card_sort')->where('card_sort_id', $cardSortId)->update(['drawn_total' => 0]);
+            return [];
+        }
+        $before = max(0, $after - $count);
+
+        // 讀取本池所有啟用規則
+        $rules = DB::table('card_sort_bonus_rule')
+            ->where('card_sort_id', $cardSortId)
+            ->where('is_active', 1)
+            ->orderBy('trigger_at', 'asc')
+            ->get(['rule_id', 'trigger_at', 'card_id']);
+        if ($rules->isEmpty()) {
+            return [];
+        }
+
+        $bonusCards = [];
+        $now = date('Y-m-d H:i:s');
+        $bonusCardIds = []; // 後面批量查一次獎勵卡信息
+
+        foreach ($rules as $rule) {
+            $n = (int)$rule->trigger_at;
+            if ($n <= 0) {
+                continue;
+            }
+            // 本次跨越的觸發點個數：floor(after/N) - floor(before/N)
+            $timesHit = intdiv($after, $n) - intdiv($before, $n);
+            for ($i = 1; $i <= $timesHit; $i++) {
+                $position = $before + $i * $n; // 第 before+N / before+2N / ... 張
+                $bonusCardIds[] = [
+                    'rule_id'          => (int)$rule->rule_id,
+                    'trigger_position' => $position,
+                    'card_id'          => (int)$rule->card_id,
+                ];
+            }
+        }
+        if (empty($bonusCardIds)) {
+            return [];
+        }
+
+        // 一次查獎勵卡信息（去重後再查）
+        $uniqueCardIds = array_values(array_unique(array_column($bonusCardIds, 'card_id')));
+        $cardInfoMap = [];
+        if (!empty($uniqueCardIds)) {
+            $cardCols = ['card_id', 'card_sort_id', 'card_name', 'en_card_name', 'card_img',
+                'card_price', 'card_type', 'card_tag', 'card_stock'];
+            $cardRows = DB::table('card')
+                ->whereIn('card_id', $uniqueCardIds)
+                ->where('card_status', 1)
+                ->get($cardCols);
+            foreach ($cardRows as $cr) {
+                $cardInfoMap[(int)$cr->card_id] = (array)$cr;
+            }
+        }
+
+        foreach ($bonusCardIds as $b) {
+            $ruleId = $b['rule_id'];
+            $position = $b['trigger_position'];
+            $bonusCardId = $b['card_id'];
+
+            // 全局唯一鍵 (rule_id, trigger_position)：插入成功=首次觸發，衝突=已發過→跳過
+            $inserted = DB::table('card_sort_bonus_log')->insertOrIgnore([
+                'card_sort_id'     => $cardSortId,
+                'rule_id'          => $ruleId,
+                'trigger_position' => $position,
+                'user_id'          => $userId,
+                'card_id'          => $bonusCardId,
+                'draw_task_id'     => 0, // 後續 reserveCardsAndCharge 才產生 task_id，這裡先留空
+                'remark'           => '',
+                'created_at'       => $now,
+                'updated_at'       => $now,
+            ]);
+            if ($inserted === 0) {
+                continue; // 已發過，跳過
+            }
+
+            // 獎勵卡必須存在、在本池、庫存 > 0
+            $info = $cardInfoMap[$bonusCardId] ?? null;
+            if (empty($info) || (int)($info['card_stock'] ?? 0) <= 0) {
+                DB::table('card_sort_bonus_log')
+                    ->where('rule_id', $ruleId)
+                    ->where('trigger_position', $position)
+                    ->update(['remark' => '獎勵卡庫存不足，已跳過', 'updated_at' => $now]);
+                continue;
+            }
+            // 行鎖校驗 + 條件式扣庫存（必須 > 0 才扣）
+            $lockedBonus = DB::table('card')
+                ->where('card_id', $bonusCardId)
+                ->where('card_stock', '>', 0)
+                ->lockForUpdate()
+                ->decrement('card_stock', 1);
+            if ($lockedBonus === 0) {
+                DB::table('card_sort_bonus_log')
+                    ->where('rule_id', $ruleId)
+                    ->where('trigger_position', $position)
+                    ->update(['remark' => '獎勵卡庫存不足（扣減時檢查），已跳過', 'updated_at' => $now]);
+                continue;
+            }
+
+            // 成功：標記 is_bonus + bonus_position，併入返回數組
+            $bonusCards[] = array_merge($info, [
+                'is_bonus'        => 1,
+                'bonus_position'  => $position,
+                'bonus_rule_id'   => $ruleId,
+            ]);
+        }
+
+        if (!empty($bonusCards)) {
+            \Log::info('sort bonus triggered', [
+                'user_id' => $userId, 'card_sort_id' => $cardSortId,
+                'count' => $count, 'before' => $before, 'after' => $after,
+                'bonus_count' => count($bonusCards),
+            ]);
+        }
+        return $bonusCards;
     }
 
     /**
@@ -1646,6 +1821,50 @@ class Card extends Base
             $maxDrawCount = 0;
         }
         $results['max_draw_count'] = max(0, $maxDrawCount);
+
+        // 額外獎勵規則（每 N 張發一張獎勵卡）：單池版本
+        $bonusRules = [];
+        $sortDrawnTotal = 0;
+        try {
+            $hasBonusRuleTable = DB::getSchemaBuilder()->hasTable('card_sort_bonus_rule');
+            $hasDrawnTotalCol = self::hasColumnCached('card_sort', 'drawn_total');
+            if ($hasBonusRuleTable) {
+                $bRows = DB::table('card_sort_bonus_rule')
+                    ->where('card_sort_id', $data['card_sort_id'])
+                    ->where('is_active', 1)
+                    ->orderBy('trigger_at', 'asc')
+                    ->get(['trigger_at', 'card_id']);
+                $bCardIds = array_values(array_unique(array_filter(array_map('intval', $bRows->pluck('card_id')->toArray()))));
+                $bCardInfo = [];
+                if (!empty($bCardIds)) {
+                    $bCardInfo = DB::table('card')
+                        ->whereIn('card_id', $bCardIds)
+                        ->where('card_status', 1)
+                        ->get(['card_id', 'card_name', 'card_img', 'card_tag'])
+                        ->keyBy('card_id')
+                        ->toArray();
+                }
+                foreach ($bRows as $br) {
+                    $info = $bCardInfo[$br->card_id] ?? null;
+                    $bonusRules[] = [
+                        'trigger_at' => (int)$br->trigger_at,
+                        'card_id'    => (int)$br->card_id,
+                        'card_name'  => $info ? ($info->card_name ?? '') : '',
+                        'card_img'   => $info ? ($info->card_img ?? '') : '',
+                        'card_tag'   => $info ? ($info->card_tag ?? '') : '',
+                    ];
+                }
+            }
+            if ($hasDrawnTotalCol) {
+                $sortDrawnTotal = (int)DB::table('card_sort')
+                    ->where('card_sort_id', $data['card_sort_id'])
+                    ->value('drawn_total');
+            }
+        } catch (\Throwable $e) {
+            // 新表/新列不存在時跳過，不影響接口正常返回
+        }
+        $results['bonus_rules'] = $bonusRules;
+        $results['drawn_total'] = $sortDrawnTotal;
 
         if(!empty($results['data'])){
             return $this->success(__('api.list_success'), $results);

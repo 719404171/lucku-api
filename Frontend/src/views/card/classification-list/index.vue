@@ -50,6 +50,7 @@
     >
       <template #control="{ scope }">
         <el-link class="row-control-item" :class="$store.state.app.size" type="primary" :underline="false" @click="view(scope.row)">关联</el-link>
+        <el-link class="row-control-item" :class="$store.state.app.size" type="primary" :underline="false" icon="el-icon-gift" @click="openBonus(scope.row)">額外獎勵</el-link>
         <el-link
           class="row-control-item"
           :class="$store.state.app.size"
@@ -416,11 +417,85 @@
       :have="0"
       v-model="animSelectedFile"
     />
+    <!-- 额外奖励规则弹窗 -->
+    <el-dialog
+      :close-on-click-modal="false"
+      :visible.sync="bonusDialog"
+      width="760px"
+      :title="'額外獎勵 — ' + (bonusSort ? bonusSort.card_sort_name : '')"
+      top="6vh"
+    >
+      <div v-if="!bonusHasTable" style="padding:20px;text-align:center;color:#f56c6c;">
+        功能尚未啟用：請先執行數據庫遷移 <code>2026_11_13_00000*</code>
+      </div>
+      <div v-else>
+        <div style="margin-bottom:12px;color:#909399;font-size:13px;">
+          本池全局已抽：<b style="color:#409eff;">{{ bonusDrawnTotal }}</b> 張
+          &nbsp;|&nbsp; 每配置一條「第 N 張」，即從卡池全局計數器中，
+          每達到該 N 的倍數時額外發放一次獎勵（免費、正常進背包）。
+          <i :style="{ color: '#e6a23c' }">獎勵卡必須從本池已關聯的卡中選擇。</i>
+        </div>
+
+        <el-button type="primary" size="small" icon="el-icon-plus" :disabled="bonusLoading" @click="addBonusRule">新增一條規則</el-button>
+
+        <el-table
+          v-loading="bonusLoading"
+          :data="bonusRules"
+          empty-text="暫無規則"
+          style="margin-top:10px;width:100%;"
+          size="mini"
+          border
+        >
+          <el-table-column label="啟用" width="70" align="center">
+            <template slot-scope="{ row }">
+              <el-switch v-model="row.is_active" :active-value="1" :inactive-value="0" />
+            </template>
+          </el-table-column>
+          <el-table-column label="每 N 張發一次" width="160">
+            <template slot-scope="{ row }">
+              <el-input-number v-model="row.trigger_at" :min="1" :step="1" size="small" controls-position="right" style="width:120px;" />
+            </template>
+          </el-table-column>
+          <el-table-column label="獎勵卡牌" min-width="260">
+            <template slot-scope="{ row }">
+              <el-select v-model="row.card_id" filterable size="small" placeholder="請選擇獎勵卡" style="width:100%;">
+                <el-option
+                  v-for="c in bonusCards"
+                  :key="c.card_id"
+                  :label="(c.card_img ? '[圖] ' : '') + c.card_name + '（庫存 ' + c.card_stock + '）'"
+                  :value="Number(c.card_id)"
+                  :disabled="c.card_stock <= 0"
+                />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="已發放" width="80" align="center">
+            <template slot-scope="{ row }">{{ row.issued_count || 0 }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="70" align="center">
+            <template slot-scope="{ $index }">
+              <el-button type="text" size="small" style="color:#f56c6c;" @click="removeBonusRule($index)">刪除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div style="margin-top:12px;color:#909399;font-size:12px;line-height:1.6;">
+          提示：
+          <br/>• 一次抽 100 張跨越多個 N（如 N=10、抽 100 張），會最多發放 10 次獎勵。
+          <br/>• 獎勵卡庫存不足 / 已下架時，該次贈送自動跳過，不影響本次付費抽卡結果。
+          <br/>• 獎勵卡免費發放，正常走訂單流程、正常進用戶背包。
+        </div>
+      </div>
+      <span slot="footer">
+        <el-button @click="bonusDialog = false">取消</el-button>
+        <el-button type="primary" :loading="bonusSaving" :disabled="!bonusHasTable" @click="saveBonus">保存</el-button>
+      </span>
+    </el-dialog>
 </div>
 </template>
 
 <script>
-import { addCardCate, delCardCate, getCardsBySort, associateCards, updateCardTagBatch, saveCardTagOrder, saveCardTagAnimation, updateCardPriority, editCardSortDrawEnable, batchCardSortDrawEnable, editCardSortOnceOnly, getAllCardBrands, updateCardSortDrawPrice, initCardSort, reqLevel } from '@/api'
+import { addCardCate, delCardCate, getCardsBySort, associateCards, updateCardTagBatch, saveCardTagOrder, saveCardTagAnimation, updateCardPriority, editCardSortDrawEnable, batchCardSortDrawEnable, editCardSortOnceOnly, getAllCardBrands, updateCardSortDrawPrice, initCardSort, reqLevel, getCardSortBonusRules, saveCardSortBonusRules } from '@/api'
 import { classificationList } from '@/form'
 import paging from '@/mixins/paging'
 import draggable from 'vuedraggable'
@@ -503,7 +578,16 @@ export default {
       pricePercent: 100,
       autoUpdatePrice: 1,
       savingPrice: false,
-      savingAutoUpdate: false
+      savingAutoUpdate: false,
+      // 額外獎勵（每 N 張發一張獎勵卡）
+      bonusDialog: false,
+      bonusSort: null,   // { card_sort_id, card_sort_name }
+      bonusDrawnTotal: 0,
+      bonusHasTable: true,
+      bonusCards: [],    // 本池卡片下拉 { card_id, card_name, card_img, card_stock }
+      bonusRules: [],    // 現有規則 [{ rule_id, trigger_at, card_id, is_active }]
+      bonusLoading: false,
+      bonusSaving: false
     }
   },
   computed: {
@@ -1199,6 +1283,77 @@ export default {
     },
     onRcc({ scope: { row }, type }) {
       this[type](row)
+    },
+    // ============ 額外獎勵 methods ============
+    async openBonus(row) {
+      this.bonusSort = row
+      this.bonusDialog = true
+      this.bonusLoading = true
+      this.bonusRules = []
+      this.bonusCards = []
+      try {
+        const [ruleRes, cardRes] = await Promise.all([
+          getCardSortBonusRules({ card_sort_id: row.card_sort_id }),
+          getCardsBySort({ card_sort_id: row.card_sort_id, page: 1, limit: 2000 }),
+        ])
+        this.bonusDrawnTotal = Number(ruleRes.results.drawn_total || 0)
+        this.bonusHasTable = !!ruleRes.results.has_table
+        this.bonusRules = (ruleRes.results.rules || []).map(r => ({ ...r }))
+        // 本池可用卡（可選為獎勵卡）
+        this.bonusCards = ((cardRes.results && cardRes.results.data) || []).map(c => ({
+          card_id: c.card_id,
+          card_name: c.card_name || '',
+          card_img: c.card_img || '',
+          card_stock: Number(c.card_stock || 0),
+          card_status: Number(c.card_status || 1),
+        })).filter(c => c.card_status === 1)
+      } catch (e) {
+        this.$message.error('讀取獎勵規則失敗')
+      } finally {
+        this.bonusLoading = false
+      }
+    },
+    addBonusRule() {
+      this.bonusRules.push({
+        rule_id: 0,
+        trigger_at: 10,
+        card_id: null,
+        is_active: 1,
+        sort: this.bonusRules.length + 1,
+        issued_count: 0,
+      })
+    },
+    removeBonusRule(idx) {
+      this.bonusRules.splice(idx, 1)
+    },
+    async saveBonus() {
+      // 前端基礎校驗
+      const triggers = []
+      for (let i = 0; i < this.bonusRules.length; i++) {
+        const r = this.bonusRules[i]
+        if (!r.trigger_at || r.trigger_at < 1) { this.$message.error(`第 ${i + 1} 條規則的「每 N 張」必須為正整數`); return }
+        if (!r.card_id) { this.$message.error(`第 ${i + 1} 條規則未選擇獎勵卡牌`); return }
+        if (triggers.indexOf(r.trigger_at) > -1) { this.$message.error(`「每 N 張」不能重複：N=${r.trigger_at}`); return }
+        triggers.push(r.trigger_at)
+      }
+      this.bonusSaving = true
+      try {
+        const res = await saveCardSortBonusRules({
+          card_sort_id: this.bonusSort.card_sort_id,
+          rules: this.bonusRules.map(r => ({
+            trigger_at: Number(r.trigger_at),
+            card_id: Number(r.card_id),
+            is_active: r.is_active,
+            sort: Number(r.sort),
+          })),
+        })
+        this.$message.success(`已保存 ${res.results.saved} 條規則`)
+        // 保存成功後刷新一次規則（拿回 issued_count 等最新數據）
+        this.openBonus(this.bonusSort)
+      } catch (e) {
+      } finally {
+        this.bonusSaving = false
+      }
     },
     // 卡池初始化：複製設置/預設相同的新池，原池軟刪除
     initPool(row) {

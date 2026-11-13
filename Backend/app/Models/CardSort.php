@@ -738,6 +738,57 @@ class CardSort extends Base
                     ->toArray();
             }
 
+            // 額外獎勵規則（每 N 張發一張獎勵卡）：一次性批量查詢所有已啟用規則，按 card_sort_id 分組
+            $bonusRulesBySort = [];
+            $hasBonusRuleTable = false;
+            $hasBonusLogTable = false;
+            $hasDrawnTotalCol = false;
+            try {
+                $hasBonusRuleTable = DB::getSchemaBuilder()->hasTable('card_sort_bonus_rule');
+                $hasBonusLogTable  = DB::getSchemaBuilder()->hasTable('card_sort_bonus_log');
+                $hasDrawnTotalCol  = self::hasColumnCached('card_sort', 'drawn_total');
+            } catch (\Throwable $e) {
+                $hasBonusRuleTable = false;
+                $hasBonusLogTable  = false;
+                $hasDrawnTotalCol  = false;
+            }
+            $sortDrawnTotals = [];
+            if ($hasBonusRuleTable) {
+                $bonusRows = DB::table('card_sort_bonus_rule')
+                    ->whereIn('card_sort_id', $sortIds)
+                    ->where('is_active', 1)
+                    ->orderBy('trigger_at', 'asc')
+                    ->get(['card_sort_id', 'trigger_at', 'card_id']);
+                $bCardIds = array_values(array_unique(array_filter(array_map('intval', $bonusRows->pluck('card_id')->toArray()))));
+                $bCardInfo = [];
+                if (!empty($bCardIds)) {
+                    $bCardInfo = DB::table('card')
+                        ->whereIn('card_id', $bCardIds)
+                        ->where('card_status', 1)
+                        ->get(['card_id', 'card_name', 'card_img', 'card_tag', 'card_stock'])
+                        ->keyBy('card_id')
+                        ->toArray();
+                }
+                foreach ($bonusRows as $br) {
+                    $info = $bCardInfo[$br->card_id] ?? null;
+                    $bonusRulesBySort[(int)$br->card_sort_id][] = [
+                        'trigger_at' => (int)$br->trigger_at,
+                        'card_id'    => (int)$br->card_id,
+                        'card_name'  => $info ? ($info->card_name ?? '') : '',
+                        'card_img'   => $info ? ($info->card_img ?? '') : '',
+                        'card_tag'   => $info ? ($info->card_tag ?? '') : '',
+                    ];
+                }
+                // 一次性批量讀取 drawn_total 給 APP 顯示「當前進度」
+                if ($hasDrawnTotalCol) {
+                    $sortDrawnTotals = DB::table('card_sort')
+                        ->whereIn('card_sort_id', $sortIds)
+                        ->pluck('drawn_total', 'card_sort_id')
+                        ->map(function ($v) { return (int)($v ?? 0); })
+                        ->toArray();
+                }
+            }
+
             // 會員等級限制（多等級 + 每等級可抽張數，兼容舊單等級字段）+ 當前用戶是否達標
             $memberLevelLimits = [];
             $memberLimits = [];
@@ -877,6 +928,11 @@ class CardSort extends Base
                     $maxDrawCount = 0;
                 }
                 $results['data'][$k]['max_draw_count'] = max(0, $maxDrawCount);
+                // 額外獎勵規則（每 N 張發一張獎勵卡）
+                $results['data'][$k]['bonus_rules'] = $bonusRulesBySort[$sid] ?? [];
+                $results['data'][$k]['drawn_total'] = $hasDrawnTotalCol
+                    ? (int)($sortDrawnTotals[$sid] ?? 0)
+                    : (int)($results['data'][$k]['drawn_count'] ?? 0);
             }
             return $this->success( __('api.list_success'), $results);
         }else{

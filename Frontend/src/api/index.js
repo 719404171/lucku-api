@@ -443,6 +443,10 @@ export const editCardSortOnceOnly = data => request({ url: '/editCardSortOnceOnl
 export const updateCardSortDrawPrice = data => request({ url: '/updateCardSortDrawPriceWeb', method: 'post', data })
 // 卡池初始化（复制一个设置/预设相同的新池，原池软删除）
 export const initCardSort = data => request({ url: '/initCardSortWeb', method: 'post', data })
+// 读取卡池额外奖励规则（含已抽张数 + 各规则已发放次数）
+export const getCardSortBonusRules = data => request({ url: '/getCardSortBonusRulesWeb', method: 'post', data })
+// 保存卡池额外奖励规则（全量覆盖）
+export const saveCardSortBonusRules = data => request({ url: '/saveCardSortBonusRulesWeb', method: 'post', data })
 
 const reqCate = data => request({ url: '/getCardSortListWeb', method: 'post', data })
 

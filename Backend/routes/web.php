@@ -216,6 +216,8 @@ Route::group(['middleware'=>'RefreshToken'],function (){    //检查是否登录
     Route::post("updateCardPriorityWeb", "Admin\CardSortController@updateCardPriorityWeb");//更新卡片是否展示
     Route::post("updateCardSortDrawPriceWeb", "Admin\CardSortController@updateCardSortDrawPriceWeb");//保存卡池抽卡價格公式設置（百分比/自動更新開關）並重算
     Route::post("initCardSortWeb", "Admin\CardSortController@initCardSortWeb");//卡池初始化（複製新池+預設，原池軟刪除）
+    Route::post("getCardSortBonusRulesWeb", "Admin\CardSortController@getCardSortBonusRulesWeb");//讀取卡池額外獎勵規則
+    Route::post("saveCardSortBonusRulesWeb", "Admin\CardSortController@saveCardSortBonusRulesWeb");//保存卡池額外獎勵規則
     /***************************************** 卡片管理 **************************************************************/
     Route::post("getCardListWeb", "Admin\CardController@getCardListWeb");//獲取卡片列表
     Route::post("addCardWeb", "Admin\CardController@addCardWeb");//添加卡片
