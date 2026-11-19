@@ -901,8 +901,12 @@ class Card extends Base
         $uniqueSpiderIds = array_values(array_unique(array_filter(array_column($hits, 'spider_card_id'))));
         $spiderInfoMap = [];
         if (!empty($uniqueSpiderIds)) {
-            $spiderCols = ['id', 'card_name', 'en_card_name', 'card_img', 'card_price',
-                'card_type', 'card_tag', 'card_cost', 'deal_price'];
+            // spider_cards 無 card_price 欄位，價格取 deal_price
+            $spiderCols = ['id', 'card_name', 'en_card_name', 'card_img',
+                'card_type', 'card_cost', 'deal_price'];
+            if (\Illuminate\Support\Facades\Schema::hasColumn('spider_cards', 'card_tag')) {
+                $spiderCols[] = 'card_tag';
+            }
             $spiderRows = DB::table('spider_cards')
                 ->whereIn('id', $uniqueSpiderIds)
                 ->get($spiderCols);

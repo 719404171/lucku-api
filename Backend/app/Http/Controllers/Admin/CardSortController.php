@@ -871,9 +871,14 @@ class CardSortController extends Controller
             $spiderInfoMap = [];
             $cardInfoMap = [];
             if (!empty($spiderIds)) {
+                // spider_cards 無 card_price 欄位，價格統一取 deal_price
+                $spiderCols = ['id', 'card_name', 'en_card_name', 'card_img', 'deal_price', 'card_type'];
+                if (\Illuminate\Support\Facades\Schema::hasColumn('spider_cards', 'card_tag')) {
+                    $spiderCols[] = 'card_tag';
+                }
                 $spiderInfoMap = DB::table('spider_cards')
                     ->whereIn('id', $spiderIds)
-                    ->get(['id', 'card_name', 'en_card_name', 'card_img', 'card_price', 'deal_price', 'card_tag', 'card_type'])
+                    ->get($spiderCols)
                     ->keyBy('id')->toArray();
             }
             if (!empty($legacyCardIds)) {
@@ -911,7 +916,7 @@ class CardSortController extends Controller
                 $price = 0;
                 $stock = 0;
                 if ($isSpider && $cInfo) {
-                    $price = (int)($cInfo->deal_price ?? $cInfo->card_price ?? 0);
+                    $price = (int)($cInfo->deal_price ?? 0);
                 } elseif ($cInfo) {
                     $price = (int)($cInfo->card_price ?? 0);
                     $stock = (int)($cInfo->card_stock ?? 0);
