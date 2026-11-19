@@ -432,8 +432,8 @@
         <div style="margin-bottom:12px;color:#909399;font-size:13px;">
           本池全局已抽：<b style="color:#409eff;">{{ bonusDrawnTotal }}</b> 張
           &nbsp;|&nbsp; 每配置一條「第 N 張」，即從卡池全局計數器中，
-          每達到該 N 的倍數時額外發放一次獎勵（免費、正常進背包）。
-          <i :style="{ color: '#e6a23c' }">獎勵卡必須從本池已關聯的卡中選擇。</i>
+          抽到第 N 張時額外發放一次獎勵（免費、正常進背包）。
+          <i :style="{ color: '#e6a23c' }">獎勵卡可從卡庫（所有可售卡）中選擇。</i>
         </div>
 
         <el-button type="primary" size="small" icon="el-icon-plus" :disabled="bonusLoading" @click="addBonusRule">新增一條規則</el-button>
@@ -451,21 +451,23 @@
               <el-switch v-model="row.is_active" :active-value="1" :inactive-value="0" />
             </template>
           </el-table-column>
-          <el-table-column label="每 N 張發一次" width="160">
+          <el-table-column label="第 N 張" width="160">
             <template slot-scope="{ row }">
               <el-input-number v-model="row.trigger_at" :min="1" :step="1" size="small" controls-position="right" style="width:120px;" />
             </template>
           </el-table-column>
-          <el-table-column label="獎勵卡牌" min-width="260">
+          <el-table-column label="獎勵卡牌" min-width="280">
             <template slot-scope="{ row }">
-              <el-select v-model="row.card_id" filterable size="small" placeholder="請選擇獎勵卡" style="width:100%;">
+              <el-select v-model="row.spider_card_id" filterable size="small" placeholder="請從卡庫選擇獎勵卡" style="width:100%;">
                 <el-option
                   v-for="c in bonusCards"
-                  :key="c.card_id"
-                  :label="(c.card_img ? '[圖] ' : '') + c.card_name + '（庫存 ' + c.card_stock + '）'"
-                  :value="Number(c.card_id)"
-                  :disabled="c.card_stock <= 0"
-                />
+                  :key="c.spider_card_id"
+                  :label="(c.card_img ? '[圖] ' : '') + c.card_name + '（價值 ¥' + c.card_value + '）'"
+                  :value="Number(c.spider_card_id)"
+                >
+                  <span style="float:left;">{{ c.card_name }}</span>
+                  <span style="float:right;color:#999;font-size:12px;">¥{{ c.card_value }}</span>
+                </el-option>
               </el-select>
             </template>
           </el-table-column>
@@ -481,8 +483,9 @@
 
         <div style="margin-top:12px;color:#909399;font-size:12px;line-height:1.6;">
           提示：
-          <br/>• 一次抽 100 張跨越多個 N（如 N=10、抽 100 張），會最多發放 10 次獎勵。
-          <br/>• 獎勵卡庫存不足 / 已下架時，該次贈送自動跳過，不影響本次付費抽卡結果。
+          <br/>• 僅在第 N 張（卡池全局第 N 張）觸發一次，不是每 N 張循環。
+          <br/>• 一次抽多張跨越某個 N 時，自動發放；N 已發過則不再重發。
+          <br/>• 獎勵卡從卡庫選，發放時即時創建並扣庫存。
           <br/>• 獎勵卡免費發放，正常走訂單流程、正常進用戶背包。
         </div>
       </div>
@@ -1299,14 +1302,14 @@ export default {
         this.bonusDrawnTotal = Number(ruleRes.results.drawn_total || 0)
         this.bonusHasTable = !!ruleRes.results.has_table
         this.bonusRules = (ruleRes.results.rules || []).map(r => ({ ...r }))
-        // 本池可用卡（可選為獎勵卡）——後端返回的是 associated（已關聯到本池的卡片），不是 data
-        this.bonusCards = ((cardRes.results && cardRes.results.associated) || []).map(c => ({
-          card_id: c.card_id,
+        // 卡庫（spider_cards）全部可選為獎勵卡，顯示圖片/名稱/價值
+        this.bonusCards = ((cardRes.results && cardRes.results.unassociated) || []).map(c => ({
+          spider_card_id: Number(c.id || c.card_id || 0),
           card_name: c.card_name || '',
           card_img: c.card_img || '',
-          card_stock: Number(c.card_stock || 0),
-          card_status: Number(c.card_status || 1),
-        })).filter(c => c.card_status === 1)
+          card_value: Number(c.deal_price || c.card_price || 0),
+          card_tag: c.card_tag || '',
+        })).filter(c => c.spider_card_id > 0)
       } catch (e) {
         this.$message.error('讀取獎勵規則失敗')
       } finally {
@@ -1317,7 +1320,8 @@ export default {
       this.bonusRules.push({
         rule_id: 0,
         trigger_at: 10,
-        card_id: null,
+        spider_card_id: null,
+        card_id: 0,
         is_active: 1,
         sort: this.bonusRules.length + 1,
         issued_count: 0,
@@ -1331,9 +1335,9 @@ export default {
       const triggers = []
       for (let i = 0; i < this.bonusRules.length; i++) {
         const r = this.bonusRules[i]
-        if (!r.trigger_at || r.trigger_at < 1) { this.$message.error(`第 ${i + 1} 條規則的「每 N 張」必須為正整數`); return }
-        if (!r.card_id) { this.$message.error(`第 ${i + 1} 條規則未選擇獎勵卡牌`); return }
-        if (triggers.indexOf(r.trigger_at) > -1) { this.$message.error(`「每 N 張」不能重複：N=${r.trigger_at}`); return }
+        if (!r.trigger_at || r.trigger_at < 1) { this.$message.error(`第 ${i + 1} 條規則的「第 N 張」必須為正整數`); return }
+        if (!r.spider_card_id) { this.$message.error(`第 ${i + 1} 條規則未選擇獎勵卡牌`); return }
+        if (triggers.indexOf(r.trigger_at) > -1) { this.$message.error(`「第 N 張」不能重複：N=${r.trigger_at}`); return }
         triggers.push(r.trigger_at)
       }
       this.bonusSaving = true
@@ -1342,7 +1346,7 @@ export default {
           card_sort_id: this.bonusSort.card_sort_id,
           rules: this.bonusRules.map(r => ({
             trigger_at: Number(r.trigger_at),
-            card_id: Number(r.card_id),
+            spider_card_id: Number(r.spider_card_id),
             is_active: r.is_active,
             sort: Number(r.sort),
           })),

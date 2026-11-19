@@ -875,34 +875,47 @@ class Card extends Base
 
         $bonusCards = [];
         $now = date('Y-m-d H:i:s');
-        $bonusCardIds = []; // 後面批量查一次獎勵卡信息
+        $hits = []; // [['rule_id'=>.., 'trigger_position'=>.., 'spider_card_id'=>.., 'card_id'=>..]]
 
         foreach ($rules as $rule) {
             $n = (int)$rule->trigger_at;
             if ($n <= 0) {
                 continue;
             }
-            // 本次跨越的觸發點個數：floor(after/N) - floor(before/N)
-            $timesHit = intdiv($after, $n) - intdiv($before, $n);
-            for ($i = 1; $i <= $timesHit; $i++) {
-                $position = $before + $i * $n; // 第 before+N / before+2N / ... 張
-                $bonusCardIds[] = [
-                    'rule_id'          => (int)$rule->rule_id,
-                    'trigger_position' => $position,
-                    'card_id'          => (int)$rule->card_id,
-                ];
+            // 僅在第 N 張觸發一次：before < trigger_at <= after
+            if ($n > $after || $n <= $before) {
+                continue;
             }
+            $hits[] = [
+                'rule_id'          => (int)$rule->rule_id,
+                'trigger_position' => $n,
+                'spider_card_id'   => (int)($rule->spider_card_id ?? 0),
+                'card_id'          => (int)$rule->card_id,
+            ];
         }
-        if (empty($bonusCardIds)) {
+        if (empty($hits)) {
             return [];
         }
 
-        // 一次查獎勵卡信息（去重後再查）
-        $uniqueCardIds = array_values(array_unique(array_column($bonusCardIds, 'card_id')));
+        // 查卡庫卡信息（如果規則配的是 spider_card_id）
+        $uniqueSpiderIds = array_values(array_unique(array_filter(array_column($hits, 'spider_card_id'))));
+        $spiderInfoMap = [];
+        if (!empty($uniqueSpiderIds)) {
+            $spiderCols = ['id', 'card_name', 'en_card_name', 'card_img', 'card_price',
+                'card_type', 'card_tag', 'card_cost', 'deal_price'];
+            $spiderRows = DB::table('spider_cards')
+                ->whereIn('id', $uniqueSpiderIds)
+                ->get($spiderCols);
+            foreach ($spiderRows as $sr) {
+                $spiderInfoMap[(int)$sr->id] = (array)$sr;
+            }
+        }
+        // 查本池卡信息（向後兼容舊 card_id 配置）
+        $uniqueCardIds = array_values(array_unique(array_filter(array_column($hits, 'card_id'))));
         $cardInfoMap = [];
         if (!empty($uniqueCardIds)) {
             $cardCols = ['card_id', 'card_sort_id', 'card_name', 'en_card_name', 'card_img',
-                'card_price', 'card_type', 'card_tag', 'card_stock'];
+                'card_price', 'card_type', 'card_tag', 'card_stock', 'card_status'];
             $cardRows = DB::table('card')
                 ->whereIn('card_id', $uniqueCardIds)
                 ->where('card_status', 1)
@@ -912,10 +925,11 @@ class Card extends Base
             }
         }
 
-        foreach ($bonusCardIds as $b) {
-            $ruleId = $b['rule_id'];
-            $position = $b['trigger_position'];
-            $bonusCardId = $b['card_id'];
+        foreach ($hits as $h) {
+            $ruleId    = $h['rule_id'];
+            $position  = $h['trigger_position'];
+            $spiderId  = $h['spider_card_id'];
+            $legacyCardId = $h['card_id'];
 
             // 全局唯一鍵 (rule_id, trigger_position)：插入成功=首次觸發，衝突=已發過→跳過
             $inserted = DB::table('card_sort_bonus_log')->insertOrIgnore([
@@ -923,8 +937,9 @@ class Card extends Base
                 'rule_id'          => $ruleId,
                 'trigger_position' => $position,
                 'user_id'          => $userId,
-                'card_id'          => $bonusCardId,
-                'draw_task_id'     => 0, // 後續 reserveCardsAndCharge 才產生 task_id，這裡先留空
+                'card_id'          => 0, // 後面確定後回填
+                'spider_card_id'   => $spiderId,
+                'draw_task_id'     => 0,
                 'remark'           => '',
                 'created_at'       => $now,
                 'updated_at'       => $now,
@@ -933,35 +948,91 @@ class Card extends Base
                 continue; // 已發過，跳過
             }
 
-            // 獎勵卡必須存在、在本池、庫存 > 0
-            $info = $cardInfoMap[$bonusCardId] ?? null;
-            if (empty($info) || (int)($info['card_stock'] ?? 0) <= 0) {
+            // 兩種獎勵卡來源優先 spider_card_id
+            $cardRow = null;
+            $isSpider = $spiderId > 0;
+
+            if ($isSpider) {
+                // --- 卡庫卡：即時複製進 card 表（card_sort_id = 0，表示非池內卡）---
+                $spider = $spiderInfoMap[$spiderId] ?? null;
+                if (empty($spider)) {
+                    DB::table('card_sort_bonus_log')
+                        ->where('rule_id', $ruleId)->where('trigger_position', $position)
+                        ->update(['remark' => '獎勵卡庫卡不存在（spider_card_id=' . $spiderId . '）', 'updated_at' => $now]);
+                    continue;
+                }
+                // 檢查是否已存在同 spider_card_id 的 card 記錄（避免重複複製）
+                $existingCardId = DB::table('card')->where('spider_card_id', $spiderId)->value('card_id');
+                if ($existingCardId) {
+                    $cardRow = DB::table('card')->where('card_id', $existingCardId)->lockForUpdate()->first();
+                    if ($cardRow && (int)$cardRow->card_stock <= 0) {
+                        // 已存在但庫存 0，補一張
+                        DB::table('card')->where('card_id', $existingCardId)->increment('card_stock', 1);
+                        $cardRow->card_stock = 1;
+                    }
+                } else {
+                    $newCardId = DB::table('card')->insertGetId([
+                        'card_sort_id'     => 0,        // 不屬於任何池
+                        'spider_card_id'   => $spiderId,
+                        'card_name'        => $spider['card_name'] ?? '',
+                        'en_card_name'     => $spider['en_card_name'] ?? '',
+                        'card_img'         => $spider['card_img'] ?? '',
+                        'card_price'       => 0,
+                        'card_cost'        => 0,
+                        'card_stock'       => 1,
+                        'card_status'      => 1,
+                        'card_type'        => $spider['card_type'] ?? '',
+                        'card_tag'         => $spider['card_tag'] ?? '',
+                        'created_at'       => $now,
+                        'updated_at'       => $now,
+                    ]);
+                    $cardRow = (object)array_merge(['card_id' => $newCardId], $spider, ['card_stock' => 1, 'card_status' => 1, 'card_sort_id' => 0]);
+                }
+                // 回填 log 的 card_id
                 DB::table('card_sort_bonus_log')
-                    ->where('rule_id', $ruleId)
-                    ->where('trigger_position', $position)
-                    ->update(['remark' => '獎勵卡庫存不足，已跳過', 'updated_at' => $now]);
-                continue;
+                    ->where('rule_id', $ruleId)->where('trigger_position', $position)
+                    ->update(['card_id' => (int)$cardRow->card_id]);
+            } else {
+                // --- 舊方式：從本池 card 表發 ---
+                $cardRow = DB::table('card')
+                    ->where('card_id', $legacyCardId)
+                    ->where('card_status', 1)
+                    ->where('card_stock', '>', 0)
+                    ->lockForUpdate()
+                    ->first();
+                if (empty($cardRow)) {
+                    DB::table('card_sort_bonus_log')
+                        ->where('rule_id', $ruleId)->where('trigger_position', $position)
+                        ->update(['remark' => '獎勵卡不存在或庫存不足（card_id=' . $legacyCardId . '）', 'updated_at' => $now]);
+                    continue;
+                }
+                DB::table('card')->where('card_id', $legacyCardId)->decrement('card_stock', 1);
+                DB::table('card_sort_bonus_log')
+                    ->where('rule_id', $ruleId)->where('trigger_position', $position)
+                    ->update(['card_id' => $legacyCardId]);
             }
-            // 行鎖校驗 + 條件式扣庫存（必須 > 0 才扣）
-            $lockedBonus = DB::table('card')
-                ->where('card_id', $bonusCardId)
-                ->where('card_stock', '>', 0)
-                ->lockForUpdate()
-                ->decrement('card_stock', 1);
-            if ($lockedBonus === 0) {
-                DB::table('card_sort_bonus_log')
-                    ->where('rule_id', $ruleId)
-                    ->where('trigger_position', $position)
-                    ->update(['remark' => '獎勵卡庫存不足（扣減時檢查），已跳過', 'updated_at' => $now]);
+
+            if (empty($cardRow)) {
                 continue;
             }
 
             // 成功：標記 is_bonus + bonus_position，併入返回數組
-            $bonusCards[] = array_merge($info, [
-                'is_bonus'        => 1,
-                'bonus_position'  => $position,
-                'bonus_rule_id'   => $ruleId,
-            ]);
+            $bonusCards[] = [
+                'card_id'        => (int)$cardRow->card_id,
+                'card_sort_id'   => (int)($cardRow->card_sort_id ?? 0),
+                'card_name'      => $cardRow->card_name ?? '',
+                'en_card_name'   => $cardRow->en_card_name ?? '',
+                'card_img'       => $cardRow->card_img ?? '',
+                'card_price'     => (int)($cardRow->card_price ?? 0),
+                'card_type'      => $cardRow->card_type ?? '',
+                'card_tag'       => $cardRow->card_tag ?? '',
+                'card_stock'     => (int)($cardRow->card_stock ?? 0),
+                'card_cost'      => (int)($cardRow->card_cost ?? 0),
+                'is_bonus'       => 1,
+                'bonus_position' => $position,
+                'bonus_rule_id'  => $ruleId,
+                'is_from_spider' => $isSpider ? 1 : 0,
+            ];
         }
 
         if (!empty($bonusCards)) {

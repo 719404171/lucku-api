@@ -792,25 +792,25 @@ class CardSortController extends Controller
                 }
             }
 
-            // 3.5 複製額外獎勵規則（card_id 映射到新池；drawn_total 歸零、bonus_log 不複製）
+            // 3.5 複製額外獎勵規則
+            // - spider_card_id 直接沿用（卡庫固定 ID，不隨卡池變化）
+            // - card_id 映射到新池（向後兼容舊規則）
+            // - drawn_total 歸零、bonus_log 不複製
             if (\Illuminate\Support\Facades\Schema::hasTable('card_sort_bonus_rule')) {
                 $bonusRules = DB::table('card_sort_bonus_rule')
                     ->where('card_sort_id', $card_sort_id)
                     ->get();
                 $newBonusRows = [];
                 foreach ($bonusRules as $br) {
-                    $newCardId = $cardMap[$br->card_id] ?? null;
-                    if ($newCardId === null) {
-                        continue; // 獎勵卡在新池不存在（原池已初始化過），跳過該條
-                    }
                     $newBonusRows[] = [
-                        'card_sort_id' => $newSortId,
-                        'trigger_at'   => (int)$br->trigger_at,
-                        'card_id'      => (int)$newCardId,
-                        'is_active'    => (int)$br->is_active,
-                        'sort'         => (int)$br->sort,
-                        'created_at'   => $now,
-                        'updated_at'   => $now,
+                        'card_sort_id'   => $newSortId,
+                        'trigger_at'     => (int)$br->trigger_at,
+                        'spider_card_id' => (int)($br->spider_card_id ?? 0),
+                        'card_id'        => (int)(isset($cardMap[$br->card_id]) ? $cardMap[$br->card_id] : 0),
+                        'is_active'      => (int)$br->is_active,
+                        'sort'           => (int)$br->sort,
+                        'created_at'     => $now,
+                        'updated_at'     => $now,
                     ];
                 }
                 if (!empty($newBonusRows)) {
@@ -843,6 +843,7 @@ class CardSortController extends Controller
 
     /**
      * 後台-讀取某卡池的額外獎勵規則 + 池內已抽張數（用於前端顯示當前進度）
+     * 獎勵卡信息優先從 spider_cards（卡庫）取，向後兼容舊 card_id 配置
      */
     public function getCardSortBonusRulesWeb(Request $request)
     {
@@ -862,19 +863,28 @@ class CardSortController extends Controller
             $rows = DB::table('card_sort_bonus_rule')
                 ->where('card_sort_id', $cardSortId)
                 ->orderBy('trigger_at', 'asc')
-                ->get(['rule_id', 'trigger_at', 'card_id', 'is_active', 'sort', 'created_at', 'updated_at']);
+                ->get(['rule_id', 'trigger_at', 'card_id', 'spider_card_id', 'is_active', 'sort', 'created_at', 'updated_at']);
 
-            // 查獎勵卡信息 + 該規則已發放次數
-            $cardIds = array_unique(array_filter(array_map('intval', $rows->pluck('card_id')->toArray())));
+            // 批量查獎勵卡信息：先 spider_cards（新配置），再 card（舊配置）
+            $spiderIds = array_values(array_unique(array_filter(array_map('intval', $rows->pluck('spider_card_id')->toArray()))));
+            $legacyCardIds = array_values(array_unique(array_filter(array_map('intval', $rows->pluck('card_id')->toArray()))));
+            $spiderInfoMap = [];
             $cardInfoMap = [];
-            if (!empty($cardIds)) {
-                $cardInfoMap = DB::table('card')
-                    ->whereIn('card_id', $cardIds)
-                    ->where('card_status', '<>', -1)
-                    ->get(['card_id', 'card_name', 'card_img', 'card_stock', 'card_tag'])
-                    ->keyBy('card_id')
-                    ->toArray();
+            if (!empty($spiderIds)) {
+                $spiderInfoMap = DB::table('spider_cards')
+                    ->whereIn('id', $spiderIds)
+                    ->get(['id', 'card_name', 'en_card_name', 'card_img', 'card_price', 'deal_price', 'card_tag', 'card_type'])
+                    ->keyBy('id')->toArray();
             }
+            if (!empty($legacyCardIds)) {
+                $cardInfoMap = DB::table('card')
+                    ->whereIn('card_id', $legacyCardIds)
+                    ->where('card_status', '<>', -1)
+                    ->get(['card_id', 'card_name', 'en_card_name', 'card_img', 'card_price', 'card_stock', 'card_tag'])
+                    ->keyBy('card_id')->toArray();
+            }
+
+            // 已發放次數
             $logCountMap = [];
             if ($hasLogTable) {
                 $logCountMap = DB::table('card_sort_bonus_log')
@@ -888,18 +898,40 @@ class CardSortController extends Controller
             }
 
             foreach ($rows as $r) {
-                $cInfo = $cardInfoMap[$r->card_id] ?? null;
+                $spiderId = (int)$r->spider_card_id;
+                $legacyCardId = (int)$r->card_id;
+                $cInfo = null;
+                $isSpider = $spiderId > 0;
+                if ($isSpider && isset($spiderInfoMap[$spiderId])) {
+                    $cInfo = $spiderInfoMap[$spiderId];
+                } elseif ($legacyCardId > 0 && isset($cardInfoMap[$legacyCardId])) {
+                    $cInfo = $cardInfoMap[$legacyCardId];
+                }
+
+                $price = 0;
+                $stock = 0;
+                if ($isSpider && $cInfo) {
+                    $price = (int)($cInfo->deal_price ?? $cInfo->card_price ?? 0);
+                } elseif ($cInfo) {
+                    $price = (int)($cInfo->card_price ?? 0);
+                    $stock = (int)($cInfo->card_stock ?? 0);
+                }
+
                 $rules[] = [
-                    'rule_id'           => (int)$r->rule_id,
-                    'trigger_at'        => (int)$r->trigger_at,
-                    'card_id'           => (int)$r->card_id,
-                    'is_active'         => (int)$r->is_active,
-                    'sort'              => (int)$r->sort,
-                    'card_name'         => $cInfo ? $cInfo->card_name ?? '' : '',
-                    'card_img'          => $cInfo ? $cInfo->card_img ?? '' : '',
-                    'card_stock'        => $cInfo ? (int)($cInfo->card_stock ?? 0) : 0,
-                    'card_tag'          => $cInfo ? $cInfo->card_tag ?? '' : '',
-                    'issued_count'      => $logCountMap[$r->rule_id] ?? 0,
+                    'rule_id'            => (int)$r->rule_id,
+                    'trigger_at'         => (int)$r->trigger_at,
+                    'spider_card_id'     => $spiderId,
+                    'card_id'            => $legacyCardId,
+                    'is_active'          => (int)$r->is_active,
+                    'sort'               => (int)$r->sort,
+                    'card_name'          => $cInfo ? ($cInfo->card_name ?? '') : '',
+                    'en_card_name'       => $cInfo ? ($cInfo->en_card_name ?? '') : '',
+                    'card_img'           => $cInfo ? ($cInfo->card_img ?? '') : '',
+                    'card_value'         => $price,
+                    'card_tag'           => $cInfo ? ($cInfo->card_tag ?? '') : '',
+                    'card_stock'         => $stock,
+                    'is_from_spider'     => $isSpider ? 1 : 0,
+                    'issued_count'       => $logCountMap[$r->rule_id] ?? 0,
                 ];
             }
         }
@@ -918,7 +950,8 @@ class CardSortController extends Controller
 
     /**
      * 後台-保存某卡池的額外獎勵規則（全量覆蓋）
-     * @param array rules: [{trigger_at, card_id, is_active, sort}]
+     * trigger_at = 第 N 張（僅在這一張發一次，不是每 N 張循環）
+     * spider_card_id = 從卡庫選獎勵卡
      */
     public function saveCardSortBonusRulesWeb(Request $request)
     {
@@ -928,9 +961,8 @@ class CardSortController extends Controller
             return $this->parametersError(__('api.param_error'));
         }
         if (!\Illuminate\Support\Facades\Schema::hasTable('card_sort_bonus_rule')) {
-            return $this->error('請先執行數據庫遷移（2026_11_13_00000*）');
+            return $this->error('請先執行數據庫遷移');
         }
-        // 卡池必須存在且未被軟刪
         $sort = DB::table('card_sort')->where('card_sort_id', $cardSortId)->where('status', '<>', -1)->first();
         if (empty($sort)) {
             return $this->error(__('api.param_error'));
@@ -939,49 +971,44 @@ class CardSortController extends Controller
         // 校驗每條規則
         $normalized = [];
         $triggerSeen = [];
-        $cardIds = [];
+        $spiderIds = [];
         foreach ($rules as $idx => $r) {
             $triggerAt = (int)($r['trigger_at'] ?? 0);
-            $cardId    = (int)($r['card_id'] ?? 0);
+            $spiderId  = (int)($r['spider_card_id'] ?? 0);
             $active    = isset($r['is_active']) ? (int)$r['is_active'] : 1;
             $sortVal   = isset($r['sort']) ? (int)$r['sort'] : ($idx + 1);
+
             if ($triggerAt <= 0) {
-                return $this->error('第 ' . ($idx + 1) . ' 條規則的「每N張」必須為正整數');
+                return $this->error('第 ' . ($idx + 1) . ' 條規則的「第 N 張」必須為正整數');
             }
-            if ($cardId <= 0) {
+            if ($spiderId <= 0) {
                 return $this->error('第 ' . ($idx + 1) . ' 條規則未選擇獎勵卡牌');
             }
             if (isset($triggerSeen[$triggerAt])) {
-                return $this->error('每個卡池的「每N張」不能重複，重複的 N = ' . $triggerAt);
+                return $this->error('每個卡池的「第 N 張」不能重複，重複的 N = ' . $triggerAt);
             }
             $triggerSeen[$triggerAt] = true;
-            $cardIds[] = $cardId;
+            $spiderIds[] = $spiderId;
             $normalized[] = [
-                'trigger_at' => $triggerAt,
-                'card_id'    => $cardId,
-                'is_active'  => $active ? 1 : 0,
-                'sort'       => $sortVal,
+                'trigger_at'     => $triggerAt,
+                'spider_card_id' => $spiderId,
+                'card_id'        => 0, // 新規則走卡庫，card_id 留空
+                'is_active'      => $active ? 1 : 0,
+                'sort'           => $sortVal,
             ];
         }
 
-        // 校驗所有獎勵卡必須屬於本卡池且處於正常狀態
-        if (!empty($cardIds)) {
-            $badCards = DB::table('card')
-                ->whereIn('card_id', $cardIds)
-                ->where(function ($q) use ($cardSortId) {
-                    $q->where('card_sort_id', '<>', $cardSortId)
-                      ->orWhere('card_status', '<>', 1);
-                })
-                ->pluck('card_id')
-                ->toArray();
-            if (!empty($badCards)) {
-                return $this->error('獎勵卡必須屬於本卡池且處於啟用狀態，無效 card_id：' . implode(',', $badCards));
+        // 校驗所有 spider_card_id 必須存在於 spider_cards 表
+        if (!empty($spiderIds)) {
+            $bad = DB::table('spider_cards')->whereIn('id', $spiderIds)->pluck('id')->toArray();
+            $missing = array_diff($spiderIds, $bad);
+            if (!empty($missing)) {
+                return $this->error('獎勵卡庫卡不存在，無效 spider_card_id：' . implode(',', $missing));
             }
         }
 
         DB::beginTransaction();
         try {
-            // 全量覆蓋：先刪除本池舊規則，再批量插入
             DB::table('card_sort_bonus_rule')->where('card_sort_id', $cardSortId)->delete();
             $now = date('Y-m-d H:i:s');
             foreach ($normalized as &$n) {
