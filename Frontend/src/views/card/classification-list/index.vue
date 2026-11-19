@@ -457,18 +457,27 @@
             </template>
           </el-table-column>
           <el-table-column label="獎勵卡牌" min-width="280">
-            <template slot-scope="{ row }">
-              <el-select v-model="row.spider_card_id" filterable size="small" placeholder="請從卡庫選擇獎勵卡" style="width:100%;">
-                <el-option
-                  v-for="c in bonusCards"
-                  :key="c.spider_card_id"
-                  :label="(c.card_img ? '[圖] ' : '') + c.card_name + '（價值 ¥' + c.card_value + '）'"
-                  :value="Number(c.spider_card_id)"
-                >
-                  <span style="float:left;">{{ c.card_name }}</span>
-                  <span style="float:right;color:#999;font-size:12px;">¥{{ c.card_value }}</span>
-                </el-option>
-              </el-select>
+            <template slot-scope="{ row, $index }">
+              <div style="display:flex;align-items:center;gap:8px;min-height:32px;">
+                <template v-if="row.spider_card_id">
+                  <el-image
+                    v-if="(bonusCards.find(c=>c.spider_card_id===Number(row.spider_card_id))||{}).card_img"
+                    :src="(bonusCards.find(c=>c.spider_card_id===Number(row.spider_card_id))||{}).card_img"
+                    :preview-src-list="[(bonusCards.find(c=>c.spider_card_id===Number(row.spider_card_id))||{}).card_img]"
+                    fit="cover"
+                    style="width:42px;height:42px;border-radius:4px;border:1px solid #ebeef5;"
+                  />
+                  <span v-else style="width:42px;height:42px;border-radius:4px;border:1px dashed #dcdfe6;color:#c0c4cc;display:flex;align-items:center;justify-content:center;font-size:11px;">無圖</span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;color:#303133;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ (bonusCards.find(c=>c.spider_card_id===Number(row.spider_card_id))||{}).card_name || '已選卡' }}</div>
+                    <div style="font-size:11px;color:#909399;">¥{{ (bonusCards.find(c=>c.spider_card_id===Number(row.spider_card_id))||{}).card_value || 0 }}</div>
+                  </div>
+                </template>
+                <template v-else>
+                  <span style="color:#c0c4cc;font-size:12px;">未選擇</span>
+                </template>
+                <el-button size="mini" type="primary" plain @click="openCardPicker($index)">選擇</el-button>
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="已發放" width="80" align="center">
@@ -492,6 +501,74 @@
       <span slot="footer">
         <el-button @click="bonusDialog = false">取消</el-button>
         <el-button type="primary" :loading="bonusSaving" :disabled="!bonusHasTable" @click="saveBonus">保存</el-button>
+      </span>
+    </el-dialog>
+
+    <!-- 卡牌選擇彈窗 -->
+    <el-dialog
+      :close-on-click-modal="true"
+      :visible.sync="bonusPickerDialog"
+      width="880px"
+      title="從卡庫選擇獎勵卡牌"
+      top="8vh"
+    >
+      <div style="margin-bottom:12px;">
+        <el-input
+          v-model="bonusPickerKeyword"
+          size="small"
+          prefix-icon="el-icon-search"
+          placeholder="搜索卡牌名稱"
+          clearable
+          style="width:260px;"
+        />
+        <span style="margin-left:12px;color:#909399;font-size:12px;">
+          當前選中：
+          <template v-if="bonusPickerSelectedId">
+            <b style="color:#409eff;">{{ (bonusCards.find(c=>c.spider_card_id===bonusPickerSelectedId)||{}).card_name }}</b>
+            （價值 ¥{{ (bonusCards.find(c=>c.spider_card_id===bonusPickerSelectedId)||{}).card_value || 0 }}）
+          </template>
+          <template v-else><i style="color:#f56c6c;">未選擇</i></template>
+        </span>
+      </div>
+
+      <div style="max-height:52vh;overflow-y:auto;padding:8px;border:1px solid #ebeef5;border-radius:4px;">
+        <el-empty v-if="!filteredBonusCards.length" description="卡庫暫無數據" />
+        <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;">
+          <div
+            v-for="c in filteredBonusCards"
+            :key="c.spider_card_id"
+            @click="bonusPickerSelectedId = c.spider_card_id"
+            :style="{
+              cursor: 'pointer',
+              border: bonusPickerSelectedId === c.spider_card_id ? '2px solid #409eff' : '2px solid #ebeef5',
+              borderRadius: '6px',
+              padding: '8px',
+              background: bonusPickerSelectedId === c.spider_card_id ? '#ecf5ff' : '#fff',
+              position: 'relative',
+              transition: 'all .15s',
+            }"
+          >
+            <el-image
+              v-if="c.card_img"
+              :src="c.card_img"
+              fit="cover"
+              style="width:100%;height:110px;border-radius:4px;background:#f5f7fa;"
+            />
+            <div v-else style="width:100%;height:110px;border-radius:4px;background:#f5f7fa;color:#c0c4cc;display:flex;align-items:center;justify-content:center;font-size:12px;">無圖片</div>
+            <div style="margin-top:6px;font-size:12px;color:#303133;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="c.card_name">{{ c.card_name }}</div>
+            <div style="font-size:11px;color:#e6a23c;font-weight:bold;">¥{{ c.card_value }}</div>
+            <!-- 選中勾 -->
+            <div
+              v-if="bonusPickerSelectedId === c.spider_card_id"
+              style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:#409eff;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;"
+            >✓</div>
+          </div>
+        </div>
+      </div>
+
+      <span slot="footer">
+        <el-button @click="bonusPickerDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!bonusPickerSelectedId" @click="confirmCardPicker">確定</el-button>
       </span>
     </el-dialog>
 </div>
@@ -582,15 +659,20 @@ export default {
       autoUpdatePrice: 1,
       savingPrice: false,
       savingAutoUpdate: false,
-      // 額外獎勵（每 N 張發一張獎勵卡）
+      // 額外獎勵
       bonusDialog: false,
-      bonusSort: null,   // { card_sort_id, card_sort_name }
+      bonusSort: null,
       bonusDrawnTotal: 0,
       bonusHasTable: true,
-      bonusCards: [],    // 本池卡片下拉 { card_id, card_name, card_img, card_stock }
-      bonusRules: [],    // 現有規則 [{ rule_id, trigger_at, card_id, is_active }]
+      bonusCards: [],    // 卡庫列表 { spider_card_id, card_name, card_img, card_value, card_tag }
+      bonusRules: [],
       bonusLoading: false,
-      bonusSaving: false
+      bonusSaving: false,
+      // 卡牌選擇彈窗
+      bonusPickerDialog: false,
+      bonusPickerRuleIdx: -1,   // 當前正在給哪一條規則選卡
+      bonusPickerKeyword: '',
+      bonusPickerSelectedId: 0   // 當前選中哪張卡（spider_card_id）
     }
   },
   computed: {
@@ -681,6 +763,15 @@ export default {
     },
     unassocIndeterminate() {
       return this.selectedUnassoc.length > 0 && this.selectedUnassoc.length < this.unassociatedCards.length
+    },
+    // 卡庫卡牌選擇彈窗的搜索過濾
+    filteredBonusCards() {
+      const kw = (this.bonusPickerKeyword || '').trim().toLowerCase()
+      if (!kw) return this.bonusCards
+      return this.bonusCards.filter(c =>
+        (c.card_name || '').toLowerCase().includes(kw) ||
+        (c.card_tag || '').toLowerCase().includes(kw)
+      )
     }
   },
   created() {
@@ -1329,6 +1420,26 @@ export default {
     },
     removeBonusRule(idx) {
       this.bonusRules.splice(idx, 1)
+    },
+    // 打開卡牌選擇彈窗
+    openCardPicker(ruleIdx) {
+      const rule = this.bonusRules[ruleIdx]
+      this.bonusPickerRuleIdx = ruleIdx
+      this.bonusPickerSelectedId = Number(rule.spider_card_id || 0)
+      this.bonusPickerKeyword = ''
+      this.bonusPickerDialog = true
+    },
+    // 確認選擇卡牌，回填到規則
+    confirmCardPicker() {
+      if (!this.bonusPickerSelectedId) {
+        this.$message.error('請先選擇一張卡牌')
+        return
+      }
+      const rule = this.bonusRules[this.bonusPickerRuleIdx]
+      if (rule) {
+        rule.spider_card_id = this.bonusPickerSelectedId
+      }
+      this.bonusPickerDialog = false
     },
     async saveBonus() {
       // 前端基礎校驗
