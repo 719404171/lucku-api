@@ -179,7 +179,7 @@ class CardSortController extends Controller
                   ->orWhere('card.en_card_name', 'like', '%' . $keyword . '%');
             });
         }
-        $associated = $associatedQuery->select('card.card_id', 'card.card_sort_id', 'card.card_name', 'card.en_card_name', 'card.card_img', 'card.card_price', 'card.card_cost', 'card.card_stock', 'card.card_tag', 'card.is_priority', 'spider_cards.deal_condition')
+        $associated = $associatedQuery->select('card.card_id', 'card.card_sort_id', 'card.card_name', 'card.en_card_name', 'card.card_img', 'card.card_price', 'card.card_cost', 'card.card_stock', 'card.card_status', 'card.card_tag', 'card.is_priority', 'spider_cards.deal_condition')
             ->selectRaw('card.card_price as deal_price')
             // 正價（與卡庫展示一致）：優先卡庫即時價 spider_cards.deal_price，否則用入池快照 card.card_cost
             ->selectRaw('COALESCE(NULLIF(spider_cards.deal_price, 0), card.card_cost, card.card_price, 0) as regular_price')

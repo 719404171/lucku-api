@@ -1299,8 +1299,8 @@ export default {
         this.bonusDrawnTotal = Number(ruleRes.results.drawn_total || 0)
         this.bonusHasTable = !!ruleRes.results.has_table
         this.bonusRules = (ruleRes.results.rules || []).map(r => ({ ...r }))
-        // 本池可用卡（可選為獎勵卡）
-        this.bonusCards = ((cardRes.results && cardRes.results.data) || []).map(c => ({
+        // 本池可用卡（可選為獎勵卡）——後端返回的是 associated（已關聯到本池的卡片），不是 data
+        this.bonusCards = ((cardRes.results && cardRes.results.associated) || []).map(c => ({
           card_id: c.card_id,
           card_name: c.card_name || '',
           card_img: c.card_img || '',
