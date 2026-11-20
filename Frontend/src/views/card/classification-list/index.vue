@@ -421,7 +421,7 @@
     <el-dialog
       :close-on-click-modal="false"
       :visible.sync="bonusDialog"
-      width="760px"
+      width="900px"
       :title="'額外獎勵 — ' + (bonusSort ? bonusSort.card_sort_name : '')"
       top="6vh"
     >
@@ -437,6 +437,7 @@
         </div>
 
         <el-button type="primary" size="small" icon="el-icon-plus" :disabled="bonusLoading" @click="addBonusRule">新增一條規則</el-button>
+        <el-button type="info" size="small" icon="el-icon-document" plain @click="openBonusLogs">發放日誌</el-button>
 
         <el-table
           v-loading="bonusLoading"
@@ -451,12 +452,22 @@
               <el-switch v-model="row.is_active" :active-value="1" :inactive-value="0" />
             </template>
           </el-table-column>
-          <el-table-column label="第 N 張" width="160">
+          <el-table-column label="設置第 N 張" width="150">
             <template slot-scope="{ row }">
               <el-input-number v-model="row.trigger_at" :min="1" :step="1" size="small" controls-position="right" style="width:120px;" />
             </template>
           </el-table-column>
-          <el-table-column label="獎勵卡牌" min-width="280">
+          <el-table-column label="獎勵出現抽數" width="140" align="center">
+            <template slot-scope="{ row }">
+              <div style="color:#303133;font-weight:600;">本池第 {{ row.trigger_at }} 抽</div>
+              <div v-if="Number(row.issued_count) > 0" style="font-size:11px;color:#67c23a;">已發放</div>
+              <div v-else-if="Number(row.trigger_at) > bonusDrawnTotal" style="font-size:11px;color:#909399;">
+                還需 {{ Number(row.trigger_at) - bonusDrawnTotal }} 抽
+              </div>
+              <div v-else style="font-size:11px;color:#f56c6c;">已過觸發點，未發放</div>
+            </template>
+          </el-table-column>
+          <el-table-column label="獎勵卡牌" min-width="240">
             <template slot-scope="{ row, $index }">
               <div style="display:flex;align-items:center;gap:8px;min-height:32px;">
                 <template v-if="row.spider_card_id">
@@ -571,11 +582,60 @@
         <el-button type="primary" :disabled="!bonusPickerSelectedId" @click="confirmCardPicker">確定</el-button>
       </span>
     </el-dialog>
+
+    <!-- 額外獎勵發放日誌 -->
+    <el-dialog
+      :close-on-click-modal="false"
+      :visible.sync="bonusLogDialog"
+      width="1080px"
+      :title="'獎勵發放日誌 — ' + (bonusSort ? bonusSort.card_sort_name : '')"
+      top="6vh"
+      append-to-body
+    >
+      <el-table v-loading="bonusLogLoading" :data="bonusLogs" size="mini" border max-height="480" empty-text="暫無發放記錄">
+        <el-table-column label="出現抽數" width="110" align="center">
+          <template slot-scope="{ row }">本池第 {{ row.trigger_position }} 抽</template>
+        </el-table-column>
+        <el-table-column label="領取用戶" min-width="150">
+          <template slot-scope="{ row }">
+            <div>{{ row.user_name || ('用戶 ID：' + row.user_id) }}</div>
+            <div v-if="row.user_phone || row.user_email" style="font-size:11px;color:#909399;">{{ row.user_phone || row.user_email }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="獎勵卡牌" min-width="170">
+          <template slot-scope="{ row }">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <el-image v-if="row.card_img" :src="row.card_img" fit="cover" style="width:36px;height:36px;border-radius:4px;" />
+              <span>{{ row.card_name || row.en_card_name || ('卡庫 ID：' + row.display_spider_card_id) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="狀態" width="90" align="center">
+          <template slot-scope="{ row }">
+            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="mini">{{ row.status_text }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="draw_task_id" label="抽卡批次 ID" width="100" align="center" />
+        <el-table-column prop="remark" label="發放詳情 / 失敗原因" min-width="210" show-overflow-tooltip />
+        <el-table-column prop="created_at" label="觸發時間" width="155" align="center" />
+      </el-table>
+      <el-pagination
+        v-if="bonusLogTotal > bonusLogLimit"
+        style="margin-top:14px;text-align:right;"
+        background
+        layout="total, prev, pager, next"
+        :total="bonusLogTotal"
+        :page-size="bonusLogLimit"
+        :current-page.sync="bonusLogPage"
+        @current-change="loadBonusLogs"
+      />
+      <span slot="footer"><el-button @click="bonusLogDialog = false">關閉</el-button></span>
+    </el-dialog>
 </div>
 </template>
 
 <script>
-import { addCardCate, delCardCate, getCardsBySort, associateCards, updateCardTagBatch, saveCardTagOrder, saveCardTagAnimation, updateCardPriority, editCardSortDrawEnable, batchCardSortDrawEnable, editCardSortOnceOnly, getAllCardBrands, updateCardSortDrawPrice, initCardSort, reqLevel, getCardSortBonusRules, saveCardSortBonusRules } from '@/api'
+import { addCardCate, delCardCate, getCardsBySort, associateCards, updateCardTagBatch, saveCardTagOrder, saveCardTagAnimation, updateCardPriority, editCardSortDrawEnable, batchCardSortDrawEnable, editCardSortOnceOnly, getAllCardBrands, updateCardSortDrawPrice, initCardSort, reqLevel, getCardSortBonusRules, getCardSortBonusLogs, saveCardSortBonusRules } from '@/api'
 import { classificationList } from '@/form'
 import paging from '@/mixins/paging'
 import draggable from 'vuedraggable'
@@ -668,6 +728,12 @@ export default {
       bonusRules: [],
       bonusLoading: false,
       bonusSaving: false,
+      bonusLogDialog: false,
+      bonusLogs: [],
+      bonusLogLoading: false,
+      bonusLogPage: 1,
+      bonusLogLimit: 20,
+      bonusLogTotal: 0,
       // 卡牌選擇彈窗
       bonusPickerDialog: false,
       bonusPickerRuleIdx: -1,   // 當前正在給哪一條規則選卡
@@ -1440,6 +1506,28 @@ export default {
         rule.spider_card_id = this.bonusPickerSelectedId
       }
       this.bonusPickerDialog = false
+    },
+    openBonusLogs() {
+      this.bonusLogPage = 1
+      this.bonusLogDialog = true
+      this.loadBonusLogs()
+    },
+    async loadBonusLogs() {
+      if (!this.bonusSort) return
+      this.bonusLogLoading = true
+      try {
+        const res = await getCardSortBonusLogs({
+          card_sort_id: this.bonusSort.card_sort_id,
+          page: this.bonusLogPage,
+          limit: this.bonusLogLimit,
+        })
+        this.bonusLogs = (res.results && res.results.data) || []
+        this.bonusLogTotal = Number((res.results && res.results.count) || 0)
+      } catch (e) {
+        this.$message.error('讀取發放日誌失敗')
+      } finally {
+        this.bonusLogLoading = false
+      }
     },
     async saveBonus() {
       // 前端基礎校驗

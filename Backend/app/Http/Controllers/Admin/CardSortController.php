@@ -895,7 +895,7 @@ class CardSortController extends Controller
                 $logCountMap = DB::table('card_sort_bonus_log')
                     ->where('card_sort_id', $cardSortId)
                     ->whereIn('rule_id', $rows->pluck('rule_id')->toArray())
-                    ->selectRaw('rule_id, COUNT(*) as cnt')
+                    ->selectRaw('rule_id, SUM(CASE WHEN card_id > 0 THEN 1 ELSE 0 END) as cnt')
                     ->groupBy('rule_id')
                     ->pluck('cnt', 'rule_id')
                     ->map(function ($v) { return (int)$v; })
@@ -951,6 +951,87 @@ class CardSortController extends Controller
             'drawn_total'      => $sortDrawnTotal,
             'has_table'        => $hasRuleTable && $hasLogTable && $hasCol,
         ]);
+    }
+
+    /**
+     * 後台-額外獎勵發放日誌（含成功與失敗記錄）
+     */
+    public function getCardSortBonusLogsWeb(Request $request)
+    {
+        $cardSortId = (int)$request->post('card_sort_id');
+        if ($cardSortId <= 0) {
+            return $this->parametersError(__('api.param_error'));
+        }
+        if (!\Illuminate\Support\Facades\Schema::hasTable('card_sort_bonus_log')) {
+            return $this->success(__('web.success'), ['count' => 0, 'data' => []]);
+        }
+
+        $page = max(1, (int)$request->post('page', 1));
+        $limit = min(100, max(1, (int)$request->post('limit', 20)));
+        $query = DB::table('card_sort_bonus_log')->where('card_sort_id', $cardSortId);
+        $count = (clone $query)->count();
+        $logs = $query->orderBy('log_id', 'desc')
+            ->offset(($page - 1) * $limit)->limit($limit)->get();
+
+        $ruleIds = array_values(array_unique(array_filter(array_map('intval', $logs->pluck('rule_id')->toArray()))));
+        $ruleMap = [];
+        if (!empty($ruleIds) && \Illuminate\Support\Facades\Schema::hasTable('card_sort_bonus_rule')) {
+            $ruleMap = DB::table('card_sort_bonus_rule')->whereIn('rule_id', $ruleIds)
+                ->get(['rule_id', 'card_id', 'spider_card_id'])->keyBy('rule_id')->toArray();
+        }
+
+        $userIds = array_values(array_unique(array_filter(array_map('intval', $logs->pluck('user_id')->toArray()))));
+        $cardIds = array_values(array_unique(array_filter(array_map('intval', $logs->pluck('card_id')->toArray()))));
+        $spiderIds = array_values(array_unique(array_filter(array_map('intval', $logs->pluck('spider_card_id')->toArray()))));
+        foreach ($ruleMap as $rule) {
+            $cardIds[] = (int)$rule->card_id;
+            $spiderIds[] = (int)$rule->spider_card_id;
+        }
+        $cardIds = array_values(array_unique(array_filter($cardIds)));
+        $spiderIds = array_values(array_unique(array_filter($spiderIds)));
+
+        $userMap = !empty($userIds) ? DB::table('users')->whereIn('user_id', $userIds)
+            ->get(['user_id', 'user_name', 'user_phone', 'user_email'])->keyBy('user_id')->toArray() : [];
+        $cardMap = !empty($cardIds) ? DB::table('card')->whereIn('card_id', $cardIds)
+            ->get(['card_id', 'card_name', 'en_card_name', 'card_img'])->keyBy('card_id')->toArray() : [];
+        $spiderMap = !empty($spiderIds) ? DB::table('spider_cards')->whereIn('id', $spiderIds)
+            ->get(['id', 'card_name', 'en_card_name', 'card_img'])->keyBy('id')->toArray() : [];
+
+        $data = [];
+        foreach ($logs as $log) {
+            $rule = $ruleMap[$log->rule_id] ?? null;
+            $displayCardId = (int)$log->card_id > 0 ? (int)$log->card_id : (int)($rule->card_id ?? 0);
+            $displaySpiderId = (int)$log->spider_card_id > 0 ? (int)$log->spider_card_id : (int)($rule->spider_card_id ?? 0);
+            $user = $userMap[$log->user_id] ?? null;
+            $card = $displayCardId > 0 ? ($cardMap[$displayCardId] ?? null) : null;
+            $spider = $displaySpiderId > 0 ? ($spiderMap[$displaySpiderId] ?? null) : null;
+            $cardInfo = $card ?: $spider;
+            $success = (int)$log->card_id > 0;
+            $data[] = [
+                'log_id'           => (int)$log->log_id,
+                'rule_id'          => (int)$log->rule_id,
+                'trigger_position' => (int)$log->trigger_position,
+                'user_id'          => (int)$log->user_id,
+                'user_name'        => $user->user_name ?? '',
+                'user_phone'       => $user->user_phone ?? '',
+                'user_email'       => $user->user_email ?? '',
+                'card_id'          => (int)$log->card_id,
+                'spider_card_id'   => (int)$log->spider_card_id,
+                'display_card_id'  => $displayCardId,
+                'display_spider_card_id' => $displaySpiderId,
+                'card_name'        => $cardInfo->card_name ?? '',
+                'en_card_name'     => $cardInfo->en_card_name ?? '',
+                'card_img'         => $cardInfo->card_img ?? '',
+                'draw_task_id'     => (int)$log->draw_task_id,
+                'status'           => $success ? 1 : 0,
+                'status_text'      => $success ? '發放成功' : '發放失敗',
+                'remark'           => $log->remark ?: ($success ? '發放成功' : '發放失敗'),
+                'created_at'       => $log->created_at,
+                'updated_at'       => $log->updated_at,
+            ];
+        }
+
+        return $this->success(__('web.success'), ['count' => $count, 'data' => $data]);
     }
 
     /**

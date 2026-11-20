@@ -872,7 +872,7 @@ class Card extends Base
             ->where('card_sort_id', $cardSortId)
             ->where('is_active', 1)
             ->orderBy('trigger_at', 'asc')
-            ->get(['rule_id', 'trigger_at', 'card_id']);
+            ->get(['rule_id', 'trigger_at', 'card_id', 'spider_card_id']);
         if ($rules->isEmpty()) {
             return [];
         }

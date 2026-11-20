@@ -445,6 +445,8 @@ export const updateCardSortDrawPrice = data => request({ url: '/updateCardSortDr
 export const initCardSort = data => request({ url: '/initCardSortWeb', method: 'post', data })
 // 读取卡池额外奖励规则（含已抽张数 + 各规则已发放次数）
 export const getCardSortBonusRules = data => request({ url: '/getCardSortBonusRulesWeb', method: 'post', data })
+// 读取卡池额外奖励发放日志（成功 / 失败及原因）
+export const getCardSortBonusLogs = data => request({ url: '/getCardSortBonusLogsWeb', method: 'post', data })
 // 保存卡池额外奖励规则（全量覆盖）
 export const saveCardSortBonusRules = data => request({ url: '/saveCardSortBonusRulesWeb', method: 'post', data })
 
