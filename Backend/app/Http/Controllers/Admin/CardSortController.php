@@ -916,9 +916,9 @@ class CardSortController extends Controller
                 $price = 0;
                 $stock = 0;
                 if ($isSpider && $cInfo) {
-                    $price = (int)($cInfo->deal_price ?? 0);
+                    $price = (float)($cInfo->deal_price ?? 0);
                 } elseif ($cInfo) {
-                    $price = (int)($cInfo->card_price ?? 0);
+                    $price = (float)($cInfo->card_price ?? 0);
                     $stock = (int)($cInfo->card_stock ?? 0);
                 }
 

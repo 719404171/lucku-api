@@ -981,8 +981,8 @@ class Card extends Base
                         DB::table('card')->where('card_id', $existingCardId)->increment('card_stock', 1);
                         $cardRow->card_stock = 1;
                     }
-                    // 歷史複製的獎勵卡價格為 0，按卡庫價格補齊
-                    if ($cardRow && (float)$cardRow->card_price <= 0) {
+                    // 獎勵卡價格以卡庫當前錄入價格為準，避免卡庫改價後仍用舊快照
+                    if ($cardRow && ((float)$cardRow->card_price != $spiderPrice || (float)$cardRow->card_cost != $spiderCost)) {
                         DB::table('card')->where('card_id', $existingCardId)
                             ->update(['card_price' => $spiderPrice, 'card_cost' => $spiderCost, 'updated_at' => $now]);
                         $cardRow->card_price = $spiderPrice;
@@ -1044,11 +1044,11 @@ class Card extends Base
                 'card_name'      => $cardRow->card_name ?? '',
                 'en_card_name'   => $cardRow->en_card_name ?? '',
                 'card_img'       => $cardRow->card_img ?? '',
-                'card_price'     => (int)($cardRow->card_price ?? 0),
+                'card_price'     => (float)($cardRow->card_price ?? 0),
                 'card_type'      => $cardRow->card_type ?? '',
                 'card_tag'       => $cardRow->card_tag ?? '',
                 'card_stock'     => (int)($cardRow->card_stock ?? 0),
-                'card_cost'      => (int)($cardRow->card_cost ?? 0),
+                'card_cost'      => (float)($cardRow->card_cost ?? 0),
                 'is_bonus'       => 1,
                 'bonus_position' => $position,
                 'bonus_rule_id'  => $ruleId,
