@@ -1335,7 +1335,8 @@ class Card extends Base
                 'product_number'   => 1,
                 'product_price'    => $p['price'],
                 'product_money'    => $p['price'],
-                'product_type'     => $item['card_type'],
+                // product_type 為 int；卡庫卡 card_type 是 single/box_pack 等字串，需歸一到既有的 1
+                'product_type'     => is_numeric($item['card_type'] ?? null) ? (int)$item['card_type'] : 1,
                 'logistics_status' => 0,
                 'details_remark'   => '',
                 'details_status'   => 1,
@@ -2000,9 +2001,14 @@ class Card extends Base
     public function CommonCardDetails($data){
         $where[] = array('card.card_id','=',$data['card_id']);
         $where[] = array('card.card_status','=',1);
-        $effects = $this->join('card_sort','card.card_sort_id','=','card_sort.card_sort_id')
+        // 卡庫獎勵卡 card_sort_id = 0，leftJoin 避免查不到池記錄時報錯
+        $effects = $this->leftJoin('card_sort','card.card_sort_id','=','card_sort.card_sort_id')
             ->select($this->PrefixAppDetail,'card_sort.'.$this->language .'card_sort_name as card_sort_name')
-            ->where($where)->first()->toArray();
+            ->where($where)->first();
+        if (empty($effects)) {
+            return [];
+        }
+        $effects = $effects->toArray();
         //是否收藏
         if (!empty($data['user_id'])) {
             $collect = $this->from('users as u')->join('user_collect as c', 'c.user_id', '=', 'u.user_id')
@@ -2035,9 +2041,14 @@ class Card extends Base
     public function CommonCardSpecs($data){
         $where[] = array('card.card_id','=',$data['card_id']);
         $where[] = array('card.card_status','=',1);
-        $effects = $this->join('card_sort','card.card_sort_id','=','card_sort.card_sort_id')
+        // 卡庫獎勵卡 card_sort_id = 0，leftJoin 避免查不到池記錄時報錯
+        $effects = $this->leftJoin('card_sort','card.card_sort_id','=','card_sort.card_sort_id')
             ->select($this->PrefixAppDetail,'card_sort.'.$this->language .'card_sort_name as card_sort_name')
-            ->where($where)->first()->toArray();
+            ->where($where)->first();
+        if (empty($effects)) {
+            return [];
+        }
+        $effects = $effects->toArray();
         //是否收藏
         if (!empty($data['user_id'])) {
             $collect = $this->from('users as u')->join('user_collect as c', 'c.user_id', '=', 'u.user_id')
@@ -2070,9 +2081,14 @@ class Card extends Base
     public function CardSnapshot($card_id){
         $where[] = array('card.card_id','=',$card_id);
         $where[] = array('card.card_status','=',1);
-        $effects = $this->join('card_sort','card.card_sort_id','=','card_sort.card_sort_id')
+        // 卡庫獎勵卡 card_sort_id = 0（不屬於任何池），必須 leftJoin，否則會查不到而返回 null
+        $row = $this->leftJoin('card_sort','card.card_sort_id','=','card_sort.card_sort_id')
             // ->select($this->PrefixAppDetail,'card_sort.'.$this->language .'card_sort_name as card_sort_name')
-        ->select('*') ->where($where)->first()->toArray();
+        ->select('*') ->where($where)->first();
+        if (empty($row)) {
+            return json_encode([]);
+        }
+        $effects = $row->toArray();
         if(!empty($effects['card_relation'])){
             foreach ($effects['card_relation'] as $k => $v) {
                 $effects['card_relation'][$k]['card_specs_value'] = [];
