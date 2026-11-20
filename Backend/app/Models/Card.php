@@ -818,6 +818,10 @@ class Card extends Base
                         ->update(['draw_task_id' => (int)$taskId, 'updated_at' => $now]);
                 }
                 $cards = array_merge($cards, $bonusCards);
+                // 同步更新 cards_json，讓後續建單/查詢都包含獎勵卡
+                DB::table('card_draw_tasks')
+                    ->where('task_id', $taskId)
+                    ->update(['cards_json' => json_encode($cards, JSON_UNESCAPED_UNICODE), 'updated_at' => $now]);
             }
             return ['ok' => true, 'cards' => $cards, 'task_id' => (int)$taskId];
         } catch (\Throwable $e) {
@@ -1897,7 +1901,7 @@ class Card extends Base
         }
         $results['max_draw_count'] = max(0, $maxDrawCount);
 
-        // 額外獎勵規則（每 N 張發一張獎勵卡）：單池版本
+        // 額外獎勵規則（僅在第 N 張觸發一次，不是每 N 張循環）：單池版本
         $bonusRules = [];
         $sortDrawnTotal = 0;
         try {
@@ -1908,25 +1912,51 @@ class Card extends Base
                     ->where('card_sort_id', $data['card_sort_id'])
                     ->where('is_active', 1)
                     ->orderBy('trigger_at', 'asc')
-                    ->get(['trigger_at', 'card_id']);
-                $bCardIds = array_values(array_unique(array_filter(array_map('intval', $bRows->pluck('card_id')->toArray()))));
+                    ->get(['trigger_at', 'card_id', 'spider_card_id']);
+                // spider_cards（新配置，優先）
+                $bSpiderIds = array_values(array_unique(array_filter(array_map('intval', $bRows->pluck('spider_card_id')->toArray()))));
+                $bSpiderInfo = [];
+                if (!empty($bSpiderIds)) {
+                    $spiderCols = ['id', 'card_name', 'en_card_name', 'card_img', 'deal_price', 'card_type'];
+                    if (DB::getSchemaBuilder()->hasColumn('spider_cards', 'card_tag')) {
+                        $spiderCols[] = 'card_tag';
+                    }
+                    $bSpiderInfo = DB::table('spider_cards')
+                        ->whereIn('id', $bSpiderIds)
+                        ->get($spiderCols)
+                        ->keyBy('id')
+                        ->toArray();
+                }
+                // card（舊配置，向後兼容）
+                $bLegacyIds = array_values(array_unique(array_filter(array_map('intval', $bRows->pluck('card_id')->toArray()))));
                 $bCardInfo = [];
-                if (!empty($bCardIds)) {
+                if (!empty($bLegacyIds)) {
                     $bCardInfo = DB::table('card')
-                        ->whereIn('card_id', $bCardIds)
+                        ->whereIn('card_id', $bLegacyIds)
                         ->where('card_status', 1)
-                        ->get(['card_id', 'card_name', 'card_img', 'card_tag'])
+                        ->get(['card_id', 'card_name', 'en_card_name', 'card_img', 'card_tag'])
                         ->keyBy('card_id')
                         ->toArray();
                 }
                 foreach ($bRows as $br) {
-                    $info = $bCardInfo[$br->card_id] ?? null;
+                    $spiderId = (int)$br->spider_card_id;
+                    $legacyCardId = (int)$br->card_id;
+                    $info = null;
+                    $isSpider = $spiderId > 0;
+                    if ($isSpider && isset($bSpiderInfo[$spiderId])) {
+                        $info = $bSpiderInfo[$spiderId];
+                    } elseif ($legacyCardId > 0 && isset($bCardInfo[$legacyCardId])) {
+                        $info = $bCardInfo[$legacyCardId];
+                    }
                     $bonusRules[] = [
-                        'trigger_at' => (int)$br->trigger_at,
-                        'card_id'    => (int)$br->card_id,
-                        'card_name'  => $info ? ($info->card_name ?? '') : '',
-                        'card_img'   => $info ? ($info->card_img ?? '') : '',
-                        'card_tag'   => $info ? ($info->card_tag ?? '') : '',
+                        'trigger_at'     => (int)$br->trigger_at,
+                        'spider_card_id' => $spiderId,
+                        'card_id'        => $legacyCardId,
+                        'card_name'      => $info ? ($info->card_name ?? '') : '',
+                        'en_card_name'   => $info ? ($info->en_card_name ?? '') : '',
+                        'card_img'       => $info ? ($info->card_img ?? '') : '',
+                        'card_tag'       => $info ? ($info->card_tag ?? '') : '',
+                        'is_from_spider' => $isSpider ? 1 : 0,
                     ];
                 }
             }

@@ -758,25 +758,51 @@ class CardSort extends Base
                     ->whereIn('card_sort_id', $sortIds)
                     ->where('is_active', 1)
                     ->orderBy('trigger_at', 'asc')
-                    ->get(['card_sort_id', 'trigger_at', 'card_id']);
-                $bCardIds = array_values(array_unique(array_filter(array_map('intval', $bonusRows->pluck('card_id')->toArray()))));
+                    ->get(['card_sort_id', 'trigger_at', 'card_id', 'spider_card_id']);
+                // spider_cards（新配置，優先）
+                $bSpiderIds = array_values(array_unique(array_filter(array_map('intval', $bonusRows->pluck('spider_card_id')->toArray()))));
+                $bSpiderInfo = [];
+                if (!empty($bSpiderIds)) {
+                    $spiderCols = ['id', 'card_name', 'en_card_name', 'card_img', 'deal_price', 'card_type'];
+                    if (DB::getSchemaBuilder()->hasColumn('spider_cards', 'card_tag')) {
+                        $spiderCols[] = 'card_tag';
+                    }
+                    $bSpiderInfo = DB::table('spider_cards')
+                        ->whereIn('id', $bSpiderIds)
+                        ->get($spiderCols)
+                        ->keyBy('id')
+                        ->toArray();
+                }
+                // card（舊配置，向後兼容）
+                $bLegacyCardIds = array_values(array_unique(array_filter(array_map('intval', $bonusRows->pluck('card_id')->toArray()))));
                 $bCardInfo = [];
-                if (!empty($bCardIds)) {
+                if (!empty($bLegacyCardIds)) {
                     $bCardInfo = DB::table('card')
-                        ->whereIn('card_id', $bCardIds)
+                        ->whereIn('card_id', $bLegacyCardIds)
                         ->where('card_status', 1)
-                        ->get(['card_id', 'card_name', 'card_img', 'card_tag', 'card_stock'])
+                        ->get(['card_id', 'card_name', 'en_card_name', 'card_img', 'card_tag', 'card_stock'])
                         ->keyBy('card_id')
                         ->toArray();
                 }
                 foreach ($bonusRows as $br) {
-                    $info = $bCardInfo[$br->card_id] ?? null;
+                    $spiderId = (int)$br->spider_card_id;
+                    $legacyCardId = (int)$br->card_id;
+                    $info = null;
+                    $isSpider = $spiderId > 0;
+                    if ($isSpider && isset($bSpiderInfo[$spiderId])) {
+                        $info = $bSpiderInfo[$spiderId];
+                    } elseif ($legacyCardId > 0 && isset($bCardInfo[$legacyCardId])) {
+                        $info = $bCardInfo[$legacyCardId];
+                    }
                     $bonusRulesBySort[(int)$br->card_sort_id][] = [
-                        'trigger_at' => (int)$br->trigger_at,
-                        'card_id'    => (int)$br->card_id,
-                        'card_name'  => $info ? ($info->card_name ?? '') : '',
-                        'card_img'   => $info ? ($info->card_img ?? '') : '',
-                        'card_tag'   => $info ? ($info->card_tag ?? '') : '',
+                        'trigger_at'     => (int)$br->trigger_at,
+                        'spider_card_id' => $spiderId,
+                        'card_id'        => $legacyCardId,
+                        'card_name'      => $info ? ($info->card_name ?? '') : '',
+                        'en_card_name'   => $info ? ($info->en_card_name ?? '') : '',
+                        'card_img'       => $info ? ($info->card_img ?? '') : '',
+                        'card_tag'       => $info ? ($info->card_tag ?? '') : '',
+                        'is_from_spider' => $isSpider ? 1 : 0,
                     ];
                 }
                 // 一次性批量讀取 drawn_total 給 APP 顯示「當前進度」
