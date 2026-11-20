@@ -969,6 +969,9 @@ class Card extends Base
                         ->update(['remark' => '獎勵卡庫卡不存在（spider_card_id=' . $spiderId . '）', 'updated_at' => $now]);
                     continue;
                 }
+                // 價格沿用卡庫：售價(deal_price) 作 card_price，成本(card_cost) 作 card_cost，避免獎勵卡顯示 0 元
+                $spiderPrice = (float)($spider['deal_price'] ?? 0) ?: (float)($spider['card_cost'] ?? 0);
+                $spiderCost  = (float)($spider['card_cost'] ?? 0) ?: $spiderPrice;
                 // 檢查是否已存在同 spider_card_id 的 card 記錄（避免重複複製）
                 $existingCardId = DB::table('card')->where('spider_card_id', $spiderId)->value('card_id');
                 if ($existingCardId) {
@@ -978,6 +981,13 @@ class Card extends Base
                         DB::table('card')->where('card_id', $existingCardId)->increment('card_stock', 1);
                         $cardRow->card_stock = 1;
                     }
+                    // 歷史複製的獎勵卡價格為 0，按卡庫價格補齊
+                    if ($cardRow && (float)$cardRow->card_price <= 0) {
+                        DB::table('card')->where('card_id', $existingCardId)
+                            ->update(['card_price' => $spiderPrice, 'card_cost' => $spiderCost, 'updated_at' => $now]);
+                        $cardRow->card_price = $spiderPrice;
+                        $cardRow->card_cost  = $spiderCost;
+                    }
                 } else {
                     $newCardId = DB::table('card')->insertGetId([
                         'card_sort_id'     => 0,        // 不屬於任何池
@@ -985,8 +995,8 @@ class Card extends Base
                         'card_name'        => $spider['card_name'] ?? '',
                         'en_card_name'     => $spider['en_card_name'] ?? '',
                         'card_img'         => $spider['card_img'] ?? '',
-                        'card_price'       => 0,
-                        'card_cost'        => 0,
+                        'card_price'       => $spiderPrice,
+                        'card_cost'        => $spiderCost,
                         'card_stock'       => 1,
                         'card_status'      => 1,
                         'card_type'        => $spider['card_type'] ?? '',
@@ -994,7 +1004,10 @@ class Card extends Base
                         'created_at'       => $now,
                         'updated_at'       => $now,
                     ]);
-                    $cardRow = (object)array_merge(['card_id' => $newCardId], $spider, ['card_stock' => 1, 'card_status' => 1, 'card_sort_id' => 0]);
+                    $cardRow = (object)array_merge(['card_id' => $newCardId], $spider, [
+                        'card_price' => $spiderPrice, 'card_cost' => $spiderCost,
+                        'card_stock' => 1, 'card_status' => 1, 'card_sort_id' => 0,
+                    ]);
                 }
                 // 回填 log 的 card_id
                 DB::table('card_sort_bonus_log')
