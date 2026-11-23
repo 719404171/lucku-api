@@ -51,7 +51,7 @@ class AdminsController extends Controller
      */
     public function getAdminLoginConfigWeb(){
         return $this->success(__('web.success'), [
-            'sms_enabled' => (bool)config('services.aliyun_sms.enabled'),
+            'sms_enabled' => self::adminSmsEnabled(),
         ]);
     }
 
@@ -67,7 +67,7 @@ class AdminsController extends Controller
             return $this->parametersError();
         }
         $smsConfig = config('services.aliyun_sms');
-        if(empty($smsConfig['enabled'])){
+        if(!self::adminSmsEnabled()){
             return $this->error(__('web.sms_not_enabled'));
         }
 
@@ -156,6 +156,22 @@ class AdminsController extends Controller
     }
 
     /**
+     * 後台登錄短信驗證開關（後台設置頁控制）
+     * 表/字段未就緒時按關閉處理，避免登錄頁不可用
+     * @return bool
+     */
+    private static function adminSmsEnabled(){
+        try{
+            return (int)DB::table('shop_setting')
+                ->where('shop_status','<>',-1)
+                ->orderBy('shop_id','desc')
+                ->value('admin_sms_enabled') === 1;
+        }catch(\Throwable $e){
+            return false;
+        }
+    }
+
+    /**
      * 登錄
      * @param Request $request
      * @return array
@@ -183,7 +199,7 @@ class AdminsController extends Controller
         }
 
         // 短信二次驗證（帳號密碼正確後才校驗，避免洩露帳號是否存在）
-        if(config('services.aliyun_sms.enabled')){
+        if(self::adminSmsEnabled()){
             $phone = trim((string)$hasAdmin->phone);
             if(!preg_match('/^[4-9]\d{7}$/', $phone)){
                 return $this->error(__('web.sms_phone_invalid'));

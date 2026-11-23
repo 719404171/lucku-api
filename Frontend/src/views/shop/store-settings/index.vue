@@ -32,6 +32,10 @@
               <el-switch v-model="elseForm.email_verify_required" :active-value="1" :inactive-value="0" />
               <div class="gray9 mt4">開啟後：用戶必須通過郵箱驗證才能註冊並登錄；關閉後：手機號/郵箱均可直接註冊登錄。</div>
             </el-form-item>
+            <el-form-item label="後台登錄短信驗證">
+              <el-switch v-model="elseForm.admin_sms_enabled" :active-value="1" :inactive-value="0" />
+              <div class="gray9 mt4">開啟後：管理員登錄需輸入手機驗證碼（阿里雲國際/港澳台短信，需先配置 SenderID）；關閉後：僅帳號密碼登錄。</div>
+            </el-form-item>
             <el-form-item :label="$t('store.releasedate')">
               <div>
                 <el-date-picker
@@ -80,6 +84,7 @@ export default {
         diamond_coin_rate: 1,
         diamond_exchange_enable: 1,
         email_verify_required: 0,
+        admin_sms_enabled: 0,
         release_date: ''
       },
       isLoadSub: false
@@ -97,7 +102,7 @@ export default {
           shop_logo, shop_name, shop_address, en_shop_address, shop_phone, shop_mail, shop_web,
           is_tips, is_freight,
           shop_id, minStock, freight_price, diamond_coin_rate, diamond_exchange_enable, email_verify_required, release_date,
-          app_background_img
+          admin_sms_enabled, app_background_img
         }} = await getStore()
         this.baseEcho = { shop_id, shop_logo, shop_name, shop_address, en_shop_address, shop_phone, shop_mail, shop_web, app_background_img }
         const iss = { is_tips, is_freight }
@@ -106,7 +111,7 @@ export default {
             this.checked.push(i)
           }
         }
-        Object.assign(this.elseForm, { shop_id, minStock, freight_price, diamond_coin_rate, diamond_exchange_enable, email_verify_required, release_date })
+        Object.assign(this.elseForm, { shop_id, minStock, freight_price, diamond_coin_rate, diamond_exchange_enable, email_verify_required, admin_sms_enabled, release_date })
       } catch (error) {
 
       } finally {
