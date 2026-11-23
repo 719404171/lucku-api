@@ -147,7 +147,7 @@ class PurchaseRecord extends Base
     public function purchaseWarehouseWeb($purchaseID, $purchaseType, $token) {
         DB::beginTransaction();
         try {
-            $admin = Admins::where('token', $token)->select('admin_id', 'username')->first();
+            $admin = Admins::where('token', hash('sha256', $token))->select('admin_id', 'username')->first();
             if (!$admin) {
                 return $this->error(__('web.admin_not_found'));
             }

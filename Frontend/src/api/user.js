@@ -8,6 +8,23 @@ export function login(data) {
   })
 }
 
+// 登錄頁配置（是否開啟短信驗證）
+export function getLoginConfig() {
+  return request({
+    url: '/getAdminLoginConfigWeb',
+    method: 'get'
+  })
+}
+
+// 發送登錄短信驗證碼
+export function sendLoginSmsCode(data) {
+  return request({
+    url: '/sendAdminLoginSms',
+    method: 'post',
+    data
+  })
+}
+
 export function getInfo() {
   return request({
     url: '/getAdminInfoWeb',

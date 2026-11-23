@@ -160,7 +160,7 @@ class Product extends Base
         DB::beginTransaction();
         $product['created_at'] = self::getDate();
         $productID = $this->insertGetId($product);
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         if(!empty($productID)){
             $albumInsert = true;
             $tagInsert = true;
@@ -219,7 +219,7 @@ class Product extends Base
      */
     public function editProductWeb($album,$tag,$product,$token){
         DB::beginTransaction();
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         $costeditInfo = $this->where('product_id',$product['product_id'])->select('product_cost')->first()->product_cost;
         $productUpdate = $this->where('product_id',$product['product_id'])->update($product);
         if($productUpdate){
@@ -325,7 +325,7 @@ class Product extends Base
      */
     public function editProductSpecsWeb($productRelation,$product,$token){
         DB::beginTransaction();
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         $productInfo = $this->where('product_id',$product['product_id'])->select('product_stock','product_type')->first();
         $costeditInfo = $this->where('product_id',$product['product_id'])->select('product_cost')->first()->product_cost;
         $productStockNum = 0;

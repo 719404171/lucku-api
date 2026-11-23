@@ -135,7 +135,7 @@ class Card extends Base
         $Card['card_stock'] = 1;
         $Card['card_weight'] = 10;
         $CardID = $this->insertGetId($Card);
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         if(!empty($CardID)){
             $cn_content = '增加了名稱為：'.$Card['card_name'].' 的卡片！';
             $en_content = '商品名: '.$Card['en_card_name'].' を追加';
@@ -166,7 +166,7 @@ class Card extends Base
      */
     public function editCardWeb($Card,$token){
         DB::beginTransaction();
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         $oldCost = $this->where('card_id',$Card['card_id'])->value('card_cost');
         unset($Card['is_min_stock']); unset($Card['card_relation']); unset($Card['card_specs_key']);
         // $weightMap = ['N' => 10, 'R' => 40, 'SR' => 70, 'SSR' => 90];

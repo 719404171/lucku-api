@@ -132,7 +132,7 @@ class OrderDetails extends Base{
      */
     public function confirmReceiptWeb($data,$token){
         DB::beginTransaction();
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         $logisticsUpdate = true;
         if($data['product_type'] == 1){
             $logisticsUpdate = OrderLogistics::where('details_id',$data['details_id'])->update(['logistics_status'=>2]);

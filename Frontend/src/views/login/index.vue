@@ -45,6 +45,32 @@
         </span>
       </el-form-item>
 
+      <el-form-item v-if="smsEnabled" prop="sms_code">
+        <span class="svg-container">
+          <svg-icon icon-class="password" />
+        </span>
+        <el-input
+          ref="sms_code"
+          v-model="loginForm.sms_code"
+          :placeholder="$t('login.smsPh')"
+          name="sms_code"
+          type="text"
+          tabindex="3"
+          maxlength="6"
+          auto-complete="off"
+          @keyup.enter.native="handleLogin"
+        />
+        <el-button
+          class="sms-btn"
+          type="text"
+          :loading="smsSending"
+          :disabled="smsCountdown > 0 || smsSending"
+          @click.native.prevent="handleSendSms"
+        >{{ smsCountdown > 0 ? smsCountdown + 's' : (smsSentOnce ? $t('login.resendSmsCode') : $t('login.getSmsCode')) }}</el-button>
+      </el-form-item>
+
+      <div v-if="smsEnabled && smsTip" class="sms-tip">{{ smsTip }}</div>
+
       <el-button :loading="loading" type="primary" style="width:100%;margin-bottom:30px;" @click.native.prevent="handleLogin">{{$t('login.logIn')}}</el-button>
 
     </el-form>
@@ -53,6 +79,7 @@
 
 <script>
 import { validUsername } from '@/utils/validate'
+import { getLoginConfig, sendLoginSmsCode } from '@/api/user'
 import LangSelect from '@/components/LangSelect'
 import { mapGetters } from 'vuex'
 
@@ -74,16 +101,35 @@ export default {
         callback()
       }
     }
+    const validateSmsCode = (rule, value, callback) => {
+      if (!this.smsEnabled) {
+        callback()
+        return
+      }
+      if (!value || !/^\d{6}$/.test(value)) {
+        callback(new Error(this.$t('login.smsCodeRequired')))
+      } else {
+        callback()
+      }
+    }
     return {
       bgm: process.env.VUE_APP_LOGIN_BG,
       loginForm: {
         username: '',
-        password: ''
+        password: '',
+        sms_code: ''
       },
       loginRules: {
         username: [{ required: true, trigger: 'blur', validator: validateUsername }],
-        password: [{ required: true, trigger: 'blur', validator: validatePassword }]
+        password: [{ required: true, trigger: 'blur', validator: validatePassword }],
+        sms_code: [{ required: true, trigger: 'blur', validator: validateSmsCode }]
       },
+      smsEnabled: false,
+      smsCountdown: 0,
+      smsSending: false,
+      smsSentOnce: false,
+      smsTip: '',
+      smsTimer: null,
       loading: false,
       passwordType: 'password',
       redirect: undefined
@@ -91,6 +137,15 @@ export default {
   },
   computed: {
     ...mapGetters(['logo', 'title'])
+  },
+  created() {
+    this.loadLoginConfig()
+  },
+  beforeDestroy() {
+    if (this.smsTimer) {
+      clearInterval(this.smsTimer)
+      this.smsTimer = null
+    }
   },
   watch: {
     $route: {
@@ -110,6 +165,52 @@ export default {
       this.$nextTick(() => {
         this.$refs.password.focus()
       })
+    },
+    loadLoginConfig() {
+      getLoginConfig().then(response => {
+        this.smsEnabled = !!(response.results && response.results.sms_enabled)
+      }).catch(() => {
+        this.smsEnabled = false
+      })
+    },
+    handleSendSms() {
+      if (this.smsCountdown > 0 || this.smsSending) {
+        return
+      }
+      if (!this.loginForm.username) {
+        this.$message.warning(this.$t('login.username'))
+        return
+      }
+      if (!this.loginForm.password) {
+        this.$message.warning(this.$t('login.psdPh'))
+        return
+      }
+      this.smsSending = true
+      sendLoginSmsCode({
+        username: this.loginForm.username.trim(),
+        password: this.loginForm.password
+      }).then(response => {
+        const result = response.results || {}
+        this.smsSentOnce = true
+        this.smsTip = result.phone ? `${this.$t('login.smsSent')} ${result.phone}` : ''
+        this.startCountdown(60)
+      }).catch(() => {}).finally(() => {
+        this.smsSending = false
+      })
+    },
+    startCountdown(seconds) {
+      this.smsCountdown = seconds
+      if (this.smsTimer) {
+        clearInterval(this.smsTimer)
+      }
+      this.smsTimer = setInterval(() => {
+        this.smsCountdown -= 1
+        if (this.smsCountdown <= 0) {
+          clearInterval(this.smsTimer)
+          this.smsTimer = null
+          this.smsCountdown = 0
+        }
+      }, 1000)
     },
     handleLogin() {
       this.$refs.loginForm.validate(valid => {
@@ -254,6 +355,22 @@ $light_gray:#eee;
     color: $dark_gray;
     cursor: pointer;
     user-select: none;
+  }
+
+  .sms-btn {
+    position: absolute;
+    right: 12px;
+    top: 6px;
+    padding: 0;
+    font-size: 13px;
+    color: #409eff;
+  }
+
+  .sms-tip {
+    margin: -18px 0 12px 45px;
+    font-size: 12px;
+    color: $light_gray;
+    opacity: 0.8;
   }
 }
 </style>

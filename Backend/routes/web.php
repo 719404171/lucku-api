@@ -12,12 +12,14 @@
  */
 
 
+Route::get("getAdminLoginConfigWeb", "Admin\AdminsController@getAdminLoginConfigWeb");   //登錄頁配置（是否開啟短信驗證）
+Route::post("sendAdminLoginSms", "Admin\AdminsController@sendAdminLoginSms");   //發送登錄短信驗證碼
 Route::post("AdminLoginWeb", "Admin\AdminsController@AdminLoginWeb");   //登錄
 Route::post("getShopFoundationWeb", "Admin\ShopSettingController@getShopFoundationWeb");   //获取店铺基础信息
-Route::post("uploadImageWeb", "Admin\AdminsController@uploadImageWeb");   //上傳圖片
 
 
-Route::group(['middleware'=>'RefreshToken'],function (){    //检查是否登录
+Route::group(['middleware'=>['RefreshToken','AdminOperation']],function (){    //检查是否登录 + 后台操作审计
+    Route::post("uploadImageWeb", "Admin\AdminsController@uploadImageWeb");//上傳圖片
     Route::get("getAdminMenuWeb", "Admin\AdminsController@getAdminMenuWeb");//获取管理员权限及菜单
     Route::get("getAdminInfoWeb", "Admin\AdminsController@getAdminInfoWeb");//获取管理员信息
     Route::post("getAllMenuWeb", "Admin\MenusController@getAllMenuWeb");//获取所有菜单和權限

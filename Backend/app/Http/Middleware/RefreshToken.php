@@ -20,26 +20,46 @@ class RefreshToken extends Controller
     /**
      * Handle an incoming request.
      *
+     * 安全加固：
+     * 1. 數據庫只保存 token 的 sha256，庫被讀走也無法直接調接口
+     * 2. 校驗服務端過期時間 token_expire_at（不再永久有效）
+     * 3. 校驗結果快取 60 秒（登出/改密碼時主動清除）
+     *
      * @param \Illuminate\Http\Request $request
      * @param \Closure $next
      * @return mixed
      */
     public function handle($request, Closure $next)
     {
-
-        $token=$request->header('TOKEN');
-        if (empty($token)) {
+        $token = (string)$request->header('TOKEN');
+        if ($token === '') {
             return response()->json(["status" => 400, "msg" => "No Operational Permission"]);
         }
-        // F-11：token 有效性快取 5 分鐘，避免每個請求都查庫
-        $valid = Cache::remember('admin:token:'.md5($token), 300, function () use ($token) {
-            return Admins::where('token',$token)->where('status',1)->exists();
+
+        $tokenHash = hash('sha256', $token);
+        $cacheKey = 'admin:token:v2:' . md5($token);
+
+        $adminId = Cache::remember($cacheKey, 60, function () use ($tokenHash) {
+            $admin = Admins::where('token', $tokenHash)
+                ->where('status', 1)
+                ->select('admin_id', 'token_expire_at')
+                ->first();
+            if (empty($admin)) {
+                return 0;
+            }
+            if (empty($admin->token_expire_at) || strtotime($admin->token_expire_at) <= time()) {
+                return 0;
+            }
+            return (int)$admin->admin_id;
         });
-        if(!empty($valid)){
+
+        if ($adminId > 0) {
+            $request->attributes->set('admin_id', $adminId);
+            $request->attributes->set('admin_token_hash', $tokenHash);
             return $next($request);
-        }else{
-            return response()->json(["status" => 400, "msg" => "No Operational Permission"]);
         }
 
+        Cache::forget($cacheKey);
+        return response()->json(["status" => 400, "msg" => "No Operational Permission"]);
     }
 }

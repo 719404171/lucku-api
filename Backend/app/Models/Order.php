@@ -320,7 +320,7 @@ class Order extends Base{
      * @return array
      */
     public function editOrderTimeWeb($data,$token){
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         $update = $this->where('order_id',$data['order_id'])->update(['order_time'=>$data['order_time']]);
         if($update){
             $info = $this->where('order_id',$data['order_id'])->select('order_no','delivery_mail','user_id')->first();
@@ -382,7 +382,7 @@ class Order extends Base{
      * @return array
      */
     public function confirmPaymentWeb($orderID,$token){
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         $data = $this->where('order_id',$orderID)->update(['payment_status'=>3,'payment_at'=>self::getDate()]);
         if($data){
             $info = $this->where('order_id',$orderID)->select('order_no','user_id','delivery_mail')->first();
@@ -428,7 +428,7 @@ class Order extends Base{
      */
     public function deleteOrderWeb($orderID,$token){
         DB::beginTransaction();
-        $admin = Admins::where('token',$token)->select('admin_id','username')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('admin_id','username')->first();
         // 統一轉數組，支持批量刪除
         $orderIDs = is_array($orderID) ? $orderID : explode(',', $orderID);
         $orderIDs = array_filter(array_map('intval', $orderIDs));
@@ -491,7 +491,7 @@ class Order extends Base{
      * @return array
      */
     public function addOfflineOrdersWeb($data,$token){
-        $admin = Admins::where('token',$token)->select('username','admin_id')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('username','admin_id')->first();
         DB::beginTransaction();
         $order = [
             'user_id' => $data[0]['user_id'],   //用戶id
@@ -1348,7 +1348,7 @@ class Order extends Base{
      */
     public function scanConfirmOrderWeb($data,$token){
         $effects = $this->where('order_no',$data['order_no'])->update(['payment_status'=>5]);
-        $admin = Admins::where('token',$token)->select('username','admin_id')->first();
+        $admin = Admins::where('token',hash('sha256',$token))->select('username','admin_id')->first();
         $languagenow = $this->language == "en_" ? "en" : "cn";
         if($effects){
             $info = $this->where('order_no',$data['order_no'])->select('order_id','user_id','order_no','delivery_mail')->first();

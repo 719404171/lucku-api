@@ -21,7 +21,11 @@ use App\Models\Order;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserMessage;
+use App\Services\AliyunSmsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use OSS\Core\OssException;
 use OSS\OssClient;
 
@@ -42,36 +46,230 @@ class AdminsController extends Controller
     }
 
     /**
+     * 登錄頁配置：是否開啟短信驗證
+     * @return array
+     */
+    public function getAdminLoginConfigWeb(){
+        return $this->success(__('web.success'), [
+            'sms_enabled' => (bool)config('services.aliyun_sms.enabled'),
+        ]);
+    }
+
+    /**
+     * 發送後台登錄短信驗證碼（先校驗帳號密碼，避免被用來刷短信）
+     * @param Request $request
+     * @return array
+     */
+    public function sendAdminLoginSms(Request $request){
+        $username = trim((string)$request->post('username'));
+        $password = (string)$request->post('password');
+        if($username === '' || $password === ''){
+            return $this->parametersError();
+        }
+        $smsConfig = config('services.aliyun_sms');
+        if(empty($smsConfig['enabled'])){
+            return $this->error(__('web.sms_not_enabled'));
+        }
+
+        $hasAdmin = Admins::where('username',$username)->where('status',1)->first();
+        if(empty($hasAdmin) || !self::checkAdminPassword($hasAdmin, $password)){
+            self::writeLoginFailLog($request, $username, __('web.login_error'));
+            return $this->error(__('web.login_error'));
+        }
+
+        $phone = trim((string)$hasAdmin->phone);
+        if(!preg_match('/^[4-9]\d{7}$/', $phone)){
+            return $this->error(__('web.sms_phone_invalid'));
+        }
+
+        // 重發間隔
+        $last = DB::table('admin_sms_code')->where('admin_id',$hasAdmin->admin_id)->orderByDesc('id')->first();
+        if(!empty($last) && strtotime($last->created_at) > time() - (int)$smsConfig['resend_interval']){
+            return $this->error(__('web.sms_too_frequent'));
+        }
+        // 每小時上限
+        $hourCount = DB::table('admin_sms_code')
+            ->where('admin_id',$hasAdmin->admin_id)
+            ->where('created_at','>=',date('Y-m-d H:i:s', time() - 3600))
+            ->count();
+        if($hourCount >= (int)$smsConfig['hour_limit']){
+            return $this->error(__('web.sms_hour_limit'));
+        }
+
+        $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $send = AliyunSmsService::sendCode($phone, $code);
+        if(empty($send['success'])){
+            return $this->error(__('web.sms_send_fail'), $send['error'] ?? '');
+        }
+
+        // 發送成功才落庫，並作廢該帳號未使用的舊驗證碼
+        $now = date('Y-m-d H:i:s');
+        DB::table('admin_sms_code')->where('admin_id',$hasAdmin->admin_id)->whereNull('used_at')->delete();
+        DB::table('admin_sms_code')->insert([
+            'admin_id'   => $hasAdmin->admin_id,
+            'phone'      => $phone,
+            'code_hash'  => hash('sha256', $code),
+            'expire_at'  => date('Y-m-d H:i:s', time() + (int)$smsConfig['code_expire']),
+            'attempts'   => 0,
+            'used_at'    => null,
+            'send_ip'    => (string)$request->ip(),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return $this->success(__('web.sms_send_success'), [
+            'phone'  => substr($phone, 0, 3) . '****' . substr($phone, -2),
+            'expire' => (int)$smsConfig['code_expire'],
+        ]);
+    }
+
+    /**
+     * 校驗登錄短信驗證碼
+     * @param int $adminId
+     * @param string $code
+     * @return true|string true 表示通過，字符串為錯誤提示
+     */
+    private static function verifyAdminSmsCode($adminId, $code){
+        $row = DB::table('admin_sms_code')
+            ->where('admin_id',$adminId)
+            ->whereNull('used_at')
+            ->orderByDesc('id')
+            ->first();
+        if(empty($row)){
+            return __('web.sms_code_required');
+        }
+        if(strtotime($row->expire_at) < time()){
+            return __('web.sms_code_expired');
+        }
+        if((int)$row->attempts >= 5){
+            return __('web.sms_code_locked');
+        }
+        if(!hash_equals($row->code_hash, hash('sha256', $code))){
+            DB::table('admin_sms_code')->where('id',$row->id)->increment('attempts');
+            return __('web.sms_code_error');
+        }
+        DB::table('admin_sms_code')->where('id',$row->id)->update([
+            'used_at'    => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+        return true;
+    }
+
+    /**
      * 登錄
      * @param Request $request
      * @return array
      */
     public function AdminLoginWeb(Request $request){
-        if(empty($request->post('username')) || empty($request->post('password'))){
+        $username = trim((string)$request->post('username'));
+        $password = (string)$request->post('password');
+        if($username === '' || $password === ''){
             return $this->parametersError();
-        }else{
-            $hasAdmin = Admins::where('username',$request->post('username'))->where('password',md5($request->post('password')))->first();
-            if(!empty($hasAdmin)){
-                $token = AdminTokenController::createToken($hasAdmin['admin_id'], "");
-                $state = Admins::where('admin_id',$hasAdmin['admin_id'])->update(['token'=>$token]);
-                $adminLog = [
-                    'login_admin_id' => $hasAdmin['admin_id'],
-                    'login_admin_name' => $hasAdmin['username'],
-                    'login_ip' => $request->ip(),
-                    'created_at' => date('Y-m-d H:i:s')
-                ];
-                // 解析登錄 IP 歸屬地（失敗不影響登錄）
-                $location = self::resolveIpLocation($request->ip());
-                $adminLog = array_merge($adminLog, $location);
-                $addAdminLog = AdminLog::insert($adminLog);
-                if($state && $addAdminLog){
-                    return $this->success(__('web.success'),['token'=>$token]);
-                }else{
-                    return $this->error();
-                }
-            }else{
-                return $this->error(__('web.login_error'));
+        }
+
+        // 登錄失敗限流：同一帳號 10 分鐘內失敗 5 次即鎖定
+        $failCount = AdminLog::where('login_admin_name',$username)
+            ->where('login_status',0)
+            ->where('created_at','>=',date('Y-m-d H:i:s', time() - 600))
+            ->count();
+        if($failCount >= 5){
+            return $this->error(__('web.login_locked'));
+        }
+
+        $hasAdmin = Admins::where('username',$username)->where('status',1)->first();
+        if(empty($hasAdmin) || !self::checkAdminPassword($hasAdmin, $password)){
+            self::writeLoginFailLog($request, $username, __('web.login_error'));
+            return $this->error(__('web.login_error'));
+        }
+
+        // 短信二次驗證（帳號密碼正確後才校驗，避免洩露帳號是否存在）
+        if(config('services.aliyun_sms.enabled')){
+            $phone = trim((string)$hasAdmin->phone);
+            if(!preg_match('/^[4-9]\d{7}$/', $phone)){
+                return $this->error(__('web.sms_phone_invalid'));
             }
+            $smsCode = trim((string)$request->post('sms_code'));
+            if($smsCode === ''){
+                return $this->error(__('web.sms_code_required'));
+            }
+            $check = self::verifyAdminSmsCode($hasAdmin->admin_id, $smsCode);
+            if($check !== true){
+                return $this->error($check);
+            }
+        }
+
+        // 舊 MD5 密碼在登錄成功時自動升級為 bcrypt
+        if(!self::isBcryptHash((string)$hasAdmin->password)){
+            Admins::where('admin_id',$hasAdmin->admin_id)->update(['password'=>Hash::make($password)]);
+        }
+
+        $token = AdminTokenController::createToken($hasAdmin['admin_id'], "");
+        // 數據庫只保存 token 的 sha256，並記錄服務端過期時間（默認 7 天）
+        $tokenTtl = (int)config('services.admin_auth.token_ttl', 604800);
+        $state = Admins::where('admin_id',$hasAdmin['admin_id'])->update([
+            'token' => hash('sha256', $token),
+            'token_expire_at' => date('Y-m-d H:i:s', time() + $tokenTtl),
+        ]);
+        $adminLog = [
+            'login_admin_id' => $hasAdmin['admin_id'],
+            'login_admin_name' => $hasAdmin['username'],
+            'login_ip' => $request->ip(),
+            'login_status' => 1,
+            'login_msg' => '',
+            'created_at' => date('Y-m-d H:i:s')
+        ];
+        // 解析登錄 IP 歸屬地（失敗不影響登錄）
+        $location = self::resolveIpLocation($request->ip());
+        $adminLog = array_merge($adminLog, $location);
+        $addAdminLog = AdminLog::insert($adminLog);
+        if($state && $addAdminLog){
+            return $this->success(__('web.success'),['token'=>$token]);
+        }else{
+            return $this->error();
+        }
+    }
+
+    /**
+     * 是否為 bcrypt/argon 哈希
+     * @param string $stored
+     * @return bool
+     */
+    private static function isBcryptHash($stored){
+        return strpos($stored, '$2y$') === 0 || strpos($stored, '$2a$') === 0 || strpos($stored, '$argon') === 0;
+    }
+
+    /**
+     * 校驗管理員密碼（兼容舊 MD5 與新 bcrypt）
+     * @param Admins $admin
+     * @param string $plain
+     * @return bool
+     */
+    private static function checkAdminPassword($admin, $plain){
+        $stored = (string)$admin->password;
+        if(self::isBcryptHash($stored)){
+            return Hash::check($plain, $stored);
+        }
+        return hash_equals($stored, md5($plain));
+    }
+
+    /**
+     * 記錄登錄失敗（用於限流與審計）
+     * @param Request $request
+     * @param string $username
+     * @param string $msg
+     */
+    private static function writeLoginFailLog(Request $request, $username, $msg){
+        try {
+            DB::table('admin_log')->insert([
+                'login_admin_id'   => 0,
+                'login_admin_name' => mb_substr((string)$username, 0, 250),
+                'login_ip'         => (string)$request->ip(),
+                'login_status'     => 0,
+                'login_msg'        => mb_substr((string)$msg, 0, 250),
+                'created_at'       => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            // 日誌寫入失敗不影響登錄流程
         }
     }
 
@@ -94,7 +292,9 @@ class AdminsController extends Controller
      */
     public function getAdminInfoWeb(Request $request){
         $token = $request->header('TOKEN');
-        $data = Admins::where('token',$token)->first();
+        $data = Admins::where('token',hash('sha256',$token))
+            ->select('admin_id','username','avatar','email','phone','status')
+            ->first();
         return $this->success(__('web.success'),$data);
     }
 
@@ -187,14 +387,20 @@ class AdminsController extends Controller
             return $this->error(__('web.password_too_short'));
         }
         $token = $request->header('TOKEN');
-        $admin = Admins::where('token',$token)->first();
+        $admin = Admins::where('token',hash('sha256',$token))->first();
         if(empty($admin)){
             return $this->error(__('web.login_error'));
         }
-        if($admin->password !== md5($oldPassword)){
+        if(!self::checkAdminPassword($admin, $oldPassword)){
             return $this->error(__('web.old_password_error'));
         }
-        $state = Admins::where('admin_id',$admin->admin_id)->update(['password'=>md5($newPassword),'token'=>'']);
+        // 升級為 bcrypt，並強制當前令牌失效（需要重新登錄）
+        $state = Admins::where('admin_id',$admin->admin_id)->update([
+            'password' => Hash::make($newPassword),
+            'token' => '',
+            'token_expire_at' => null,
+        ]);
+        Cache::forget('admin:token:v2:' . md5((string)$token));
         if($state){
             return $this->success(__('web.edit_success'));
         }else{

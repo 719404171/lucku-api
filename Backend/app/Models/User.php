@@ -438,7 +438,7 @@ class User extends Base
             : $data['login_time'];
         $user->created_at = self::getDate();
         $res = $user->save();
-        $adminInfo = Admins::where('token',$token)->select('username','admin_id')->first();
+        $adminInfo = Admins::where('token',hash('sha256',$token))->select('username','admin_id')->first();
         if ($res) {//添加用户不再记录操作日志
             // $cn_content= '新增了名爲 '.$data["user_name"].' 的用戶';
             // $en_content= 'Added a new user named '.$data["user_name"];

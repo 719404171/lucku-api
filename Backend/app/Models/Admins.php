@@ -17,6 +17,7 @@ namespace App\Models;
 use DateTimeInterface;
 use App\Models\Base;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Builder;
@@ -58,7 +59,7 @@ class Admins extends Base{
             ->join('role','role_menu.role_id','=','role.role_id')
             ->join('admin_role','role.role_id','=','admin_role.role_id')
             ->join('admins','admins.admin_id','=','admin_role.admin_id')
-            ->where('admins.token',$token)
+            ->where('admins.token',hash('sha256',$token))
             ->where('menu.status',1)
             ->where('role_menu.status',1)
             ->select('menu.menu_id','menu.'.$language.'menu_name as menu_name','menu.parent','menu.icon','menu.path','menu.redirect','role.role_id','role.role_name')
@@ -87,7 +88,7 @@ class Admins extends Base{
     public function getAdminListWeb($data,$token,$language){
         $limit = $data['limit'];
         $page = ($data['page'] - 1) * $limit;
-        $adminID = $this->where('token',$token)->first()->admin_id;
+        $adminID = $this->where('token',hash('sha256',$token))->first()->admin_id;
         $where[] = array('admins.admin_id','<>',$adminID);
         $where[] = array('admins.status','<>',-1);
         $where[] = array('admin_role.role_id','<>',1);
@@ -131,7 +132,8 @@ class Admins extends Base{
         })->first();
         if(empty($hasAdmin)){
             $adminInfo['created_at'] = self::getDate();
-            $adminInfo['password'] = md5($adminInfo['password']);
+            $adminInfo['password'] = Hash::make($adminInfo['password']);
+            unset($adminInfo['token'], $adminInfo['token_expire_at']);
             $adminID = $this->insertGetId($adminInfo);
             if(!empty($adminID)){
                 $addAdminRole = AdminRole::insert(['admin_id'=>$adminID,'role_id'=>$role_id,'created_at'=>self::getDate()]);
@@ -173,6 +175,16 @@ class Admins extends Base{
             $q->where('phone',$adminInfo['phone'])->where('status','<>',-1)->where('admin_id','<>',$adminInfo['admin_id']);
         })->first();
         if(empty($hasAdmin)){
+            // 不允許通過編輯接口寫入 token / 過期時間
+            unset($adminInfo['token'], $adminInfo['token_expire_at']);
+            // 密碼留空時不修改；有值時升級為 bcrypt
+            if(array_key_exists('password', $adminInfo)){
+                if($adminInfo['password'] === '' || $adminInfo['password'] === null){
+                    unset($adminInfo['password']);
+                }else{
+                    $adminInfo['password'] = Hash::make($adminInfo['password']);
+                }
+            }
             $adminID = $this->where('admin_id',$adminInfo['admin_id'])->update($adminInfo);
             if($adminID){
                 $adminRoleID = AdminRole::where('admin_id',$adminInfo['admin_id'])->first()->role_id;

@@ -78,6 +78,7 @@ class Kernel extends HttpKernel
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'RefreshToken'=>\App\Http\Middleware\RefreshToken::class,   //检测后台管理系统是否登录
+        'AdminOperation'=>\App\Http\Middleware\AdminOperationLog::class,   //后台操作审计
         'checkLogin' =>\App\Http\Middleware\CheckLogin::class,
         'CheckToken'=>\App\Http\Middleware\CheckToken::class,
         'prevent.duplicate'=>\App\Http\Middleware\PreventDuplicateRequest::class   //App防重複請求（Redis原子鎖）

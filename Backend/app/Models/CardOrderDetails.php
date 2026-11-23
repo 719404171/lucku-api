@@ -591,7 +591,7 @@ class CardOrderDetails extends Base{
      */
     public function writeMultiDrawAuditLog($token, $action, $detail = ''){
         try {
-            $admin = Admins::where('token', $token)->select('admin_id', 'username')->first();
+            $admin = Admins::where('token', hash('sha256', $token))->select('admin_id', 'username')->first();
             if (empty($admin)) {
                 return;
             }
@@ -1050,7 +1050,7 @@ class CardOrderDetails extends Base{
             return $this->error(__('web.param_error'));
         }
 
-        $admin = \App\Models\Admins::where('token', $token)->select('admin_id', 'username')->first();
+        $admin = \App\Models\Admins::where('token', hash('sha256', $token))->select('admin_id', 'username')->first();
         if (empty($admin)) {
             return $this->error(__('web.param_error'), '管理員登錄已失效');
         }
