@@ -130,20 +130,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | 阿里雲短信（後台登錄二次驗證）
+    | 阿里雲短信（後台登錄二次驗證 · 國際/港澳台 SenderID 模式）
     |--------------------------------------------------------------------------
     | enabled      = 是否強制後台登錄短信驗證（AccessKey 配置完成前保持 false）
-    | endpoint     = 國際/港澳台短信一般用 dysmsapi.ap-southeast-1.aliyuncs.com
+    | sender_id    = 控制台已報備通過的 SenderID（如 HKMOBIL）
+    | message      = 短信正文，{code} 會被替換為驗證碼
+    | type         = OTP 驗證碼 / NOTIFY 通知 / MKT 推廣
     | country_code = 手機號國家碼（香港 852）
     */
     'aliyun_sms' => [
         'enabled'           => env('ADMIN_SMS_ENABLED', false),
         'access_key_id'     => env('ALIYUN_SMS_ACCESS_KEY_ID', ''),
         'access_key_secret' => env('ALIYUN_SMS_ACCESS_KEY_SECRET', ''),
-        'sign_name'         => env('ALIYUN_SMS_SIGN_NAME', ''),
-        'template_code'     => env('ALIYUN_SMS_TEMPLATE_CODE', ''),
-        'endpoint'          => env('ALIYUN_SMS_ENDPOINT', 'dysmsapi.aliyuncs.com'),
-        'region_id'         => env('ALIYUN_SMS_REGION_ID', ''),
+        'sender_id'         => env('ALIYUN_SMS_SENDER_ID', ''),
+        'message'           => env('ALIYUN_SMS_MESSAGE', '您的驗證碼為{code}，5分鐘內有效，請勿洩露。'),
+        'type'              => env('ALIYUN_SMS_TYPE', 'OTP'),
         'country_code'      => env('ALIYUN_SMS_COUNTRY_CODE', '852'),
         'code_expire'       => (int)env('ADMIN_SMS_CODE_EXPIRE', 300),
         'resend_interval'   => (int)env('ADMIN_SMS_RESEND_INTERVAL', 60),

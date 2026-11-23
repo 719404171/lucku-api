@@ -5,8 +5,15 @@ namespace App\Services;
 use GuzzleHttp\Client;
 
 /**
- * 阿里雲短信服務（SendSms，RPC 簽名 v1.0）
- * 只依賴 Guzzle，無需額外安裝 SDK
+ * 阿里雲國際/港澳台短信（SenderID 模式）
+ *
+ * 阿里雲已將國際/港澳台短信升級為 SenderID 模式：
+ * 不需要簽名與模板，使用 SendMessageToGlobe 接口，SenderID 報備通過後即可發送。
+ *
+ * 接口固定參數（阿里雲文檔要求，勿修改）：
+ *   domain  = dysmsapi.aliyuncs.com
+ *   Version = 2017-05-25
+ *   RegionId= cn-hangzhou
  */
 class AliyunSmsService
 {
@@ -20,32 +27,31 @@ class AliyunSmsService
     public static function sendCode(string $phone, string $code): array
     {
         $cfg = config('services.aliyun_sms', []);
-        $keyId        = (string)($cfg['access_key_id'] ?? '');
-        $keySecret    = (string)($cfg['access_key_secret'] ?? '');
-        $signName     = (string)($cfg['sign_name'] ?? '');
-        $templateCode = (string)($cfg['template_code'] ?? '');
+        $keyId     = (string)($cfg['access_key_id'] ?? '');
+        $keySecret = (string)($cfg['access_key_secret'] ?? '');
+        $senderId  = (string)($cfg['sender_id'] ?? '');
 
-        if ($keyId === '' || $keySecret === '' || $signName === '' || $templateCode === '') {
-            return ['success' => false, 'error' => '未配置阿里雲短信 AccessKey / 簽名 / 模板'];
+        if ($keyId === '' || $keySecret === '' || $senderId === '') {
+            return ['success' => false, 'error' => '未配置阿里雲短信 AccessKey / SenderID'];
         }
+
+        $message = self::renderMessage((string)($cfg['message'] ?? ''), $code);
 
         $params = [
             'AccessKeyId'      => $keyId,
-            'Action'           => 'SendSms',
+            'Action'           => 'SendMessageToGlobe',
             'Format'           => 'JSON',
-            'PhoneNumbers'     => (string)($cfg['country_code'] ?? '852') . $phone,
-            'SignName'         => $signName,
+            'From'             => $senderId,
+            'Message'          => $message,
+            'RegionId'         => 'cn-hangzhou',
             'SignatureMethod'  => 'HMAC-SHA1',
             'SignatureNonce'   => md5(uniqid((string)mt_rand(), true)),
             'SignatureVersion' => '1.0',
-            'TemplateCode'     => $templateCode,
-            'TemplateParam'    => json_encode(['code' => $code], JSON_UNESCAPED_UNICODE),
             'Timestamp'        => gmdate('Y-m-d\TH:i:s\Z'),
+            'To'               => (string)($cfg['country_code'] ?? '852') . $phone,
+            'Type'             => (string)($cfg['type'] ?? 'OTP'),
             'Version'          => '2017-05-25',
         ];
-        if (!empty($cfg['region_id'])) {
-            $params['RegionId'] = (string)$cfg['region_id'];
-        }
 
         $params['Signature'] = self::sign($params, $keySecret);
 
@@ -54,8 +60,7 @@ class AliyunSmsService
             $query[] = self::percentEncode($k) . '=' . self::percentEncode((string)$v);
         }
 
-        $endpoint = (string)($cfg['endpoint'] ?? '') ?: 'dysmsapi.aliyuncs.com';
-        $url = 'https://' . $endpoint . '/?' . implode('&', $query);
+        $url = 'https://dysmsapi.aliyuncs.com/?' . implode('&', $query);
 
         try {
             $client = new Client();
@@ -69,13 +74,28 @@ class AliyunSmsService
             if (!is_array($json)) {
                 return ['success' => false, 'error' => '短信服務返回異常：' . mb_substr($body, 0, 200)];
             }
-            if (($json['Code'] ?? '') === 'OK') {
+            if (($json['ResponseCode'] ?? '') === 'OK') {
                 return ['success' => true, 'error' => null];
             }
-            return ['success' => false, 'error' => trim(($json['Code'] ?? '') . ' ' . ($json['Message'] ?? ''))];
+            $err = trim(($json['ResponseCode'] ?? '') . ' ' . ($json['ResponseDescription'] ?? '') . ' ' . ($json['Message'] ?? ''));
+            return ['success' => false, 'error' => $err !== '' ? $err : '短信發送失敗'];
         } catch (\Throwable $e) {
             return ['success' => false, 'error' => '短信服務請求失敗：' . $e->getMessage()];
         }
+    }
+
+    /**
+     * 短信正文：{code} 佔位符替換為驗證碼
+     * @param string $template
+     * @param string $code
+     * @return string
+     */
+    private static function renderMessage(string $template, string $code): string
+    {
+        if (trim($template) === '') {
+            $template = '您的驗證碼為{code}，5分鐘內有效，請勿洩露。';
+        }
+        return str_replace('{code}', $code, $template);
     }
 
     /**
