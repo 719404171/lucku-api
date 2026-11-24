@@ -54,83 +54,89 @@
       <div class="logo-container"><img alt="logo" :src="logo"></div>
 
       <div class="verify-head">
+        <div class="verify-badge"><i class="el-icon-lock" /></div>
         <h3 class="verify-title">安全驗證</h3>
-        <p class="verify-sub">
-          <span>帳號：{{ maskedUsername }}</span>
-          <span class="verify-step">第 2 步 / 共 2 步</span>
-        </p>
+        <p class="verify-sub">當前帳號：{{ maskedUsername }}</p>
+        <span class="verify-step">第 2 步 / 共 2 步</span>
       </div>
 
-      <!-- 短信驗證 -->
-      <div v-if="hasSms" class="verify-block">
-        <div class="verify-label">
-          <i class="el-icon-mobile-phone" />
-          <span>短信驗證</span>
-          <em class="verify-req">必填</em>
-        </div>
-        <div class="verify-desc">驗證碼將發送至綁定手機 {{ challenge.phone_mask || '-' }}</div>
-        <el-input
-          v-model="verifyForm.sms_code"
-          placeholder="請輸入 6 位短信驗證碼"
-          maxlength="6"
-          class="verify-input"
-        >
-          <el-button
-            slot="append"
-            class="code-btn"
-            :loading="smsSending"
-            :disabled="smsCountdown > 0 || smsSending"
-            @click.native.prevent="handleSendCode('sms')"
-          >{{ smsCountdown > 0 ? smsCountdown + 's' : '獲取驗證碼' }}</el-button>
-        </el-input>
-        <div v-if="smsTip" class="verify-tip">{{ smsTip }}</div>
-      </div>
-
-      <!-- 郵箱驗證 -->
-      <div v-if="hasEmail" class="verify-block">
-        <div class="verify-label">
-          <i class="el-icon-message" />
-          <span>郵箱驗證</span>
-          <em class="verify-req">必填</em>
-        </div>
-        <div class="verify-desc">驗證碼將發送至綁定郵箱 {{ challenge.email_mask || '-' }}</div>
-        <el-input
-          v-model="verifyForm.email_code"
-          placeholder="請輸入 6 位郵箱驗證碼"
-          maxlength="6"
-          class="verify-input"
-        >
-          <el-button
-            slot="append"
-            class="code-btn"
-            :loading="emailSending"
-            :disabled="emailCountdown > 0 || emailSending"
-            @click.native.prevent="handleSendCode('email')"
-          >{{ emailCountdown > 0 ? emailCountdown + 's' : '獲取驗證碼' }}</el-button>
-        </el-input>
-        <div v-if="emailTip" class="verify-tip">{{ emailTip }}</div>
-      </div>
-
-      <!-- 安全問題 -->
-      <div v-if="hasQuestion" class="verify-block">
-        <div class="verify-label">
-          <i class="el-icon-question" />
-          <span>安全問題</span>
-          <em class="verify-req">全部答對</em>
-        </div>
-        <div class="verify-desc">請回答以下全部安全問題</div>
-        <div v-for="(q, idx) in (challenge.questions || [])" :key="q.id" class="question-item">
-          <div class="question-text">{{ idx + 1 }}. {{ q.question }}</div>
+      <div class="verify-body">
+        <!-- 短信驗證 -->
+        <div v-if="hasSms" class="verify-block">
+          <div class="verify-block-head">
+            <span class="verify-ico is-sms"><i class="el-icon-mobile-phone" /></span>
+            <div class="verify-block-title">
+              <div class="verify-label">短信驗證<em class="verify-req">必填</em></div>
+              <div class="verify-desc">驗證碼將發送至綁定手機 {{ challenge.phone_mask || '-' }}</div>
+            </div>
+          </div>
           <el-input
-            v-model="verifyForm.answers[q.id]"
-            placeholder="請輸入答案"
+            v-model="verifyForm.sms_code"
+            placeholder="請輸入 6 位短信驗證碼"
+            maxlength="6"
             class="verify-input"
-          />
+          >
+            <el-button
+              slot="append"
+              class="code-btn"
+              :loading="smsSending"
+              :disabled="smsCountdown > 0 || smsSending"
+              @click.native.prevent="handleSendCode('sms')"
+            >{{ smsCountdown > 0 ? smsCountdown + 's' : '獲取驗證碼' }}</el-button>
+          </el-input>
+          <div v-if="smsTip" class="verify-tip"><i class="el-icon-success" />{{ smsTip }}</div>
+        </div>
+
+        <!-- 郵箱驗證 -->
+        <div v-if="hasEmail" class="verify-block">
+          <div class="verify-block-head">
+            <span class="verify-ico is-email"><i class="el-icon-message" /></span>
+            <div class="verify-block-title">
+              <div class="verify-label">郵箱驗證<em class="verify-req">必填</em></div>
+              <div class="verify-desc">驗證碼將發送至綁定郵箱 {{ challenge.email_mask || '-' }}</div>
+            </div>
+          </div>
+          <el-input
+            v-model="verifyForm.email_code"
+            placeholder="請輸入 6 位郵箱驗證碼"
+            maxlength="6"
+            class="verify-input"
+          >
+            <el-button
+              slot="append"
+              class="code-btn"
+              :loading="emailSending"
+              :disabled="emailCountdown > 0 || emailSending"
+              @click.native.prevent="handleSendCode('email')"
+            >{{ emailCountdown > 0 ? emailCountdown + 's' : '獲取驗證碼' }}</el-button>
+          </el-input>
+          <div v-if="emailTip" class="verify-tip"><i class="el-icon-success" />{{ emailTip }}</div>
+        </div>
+
+        <!-- 安全問題 -->
+        <div v-if="hasQuestion" class="verify-block">
+          <div class="verify-block-head">
+            <span class="verify-ico is-question"><i class="el-icon-question" /></span>
+            <div class="verify-block-title">
+              <div class="verify-label">安全問題<em class="verify-req">全部答對</em></div>
+              <div class="verify-desc">請回答以下全部安全問題</div>
+            </div>
+          </div>
+          <div v-for="(q, idx) in (challenge.questions || [])" :key="q.id" class="question-item">
+            <div class="question-text">{{ idx + 1 }}. {{ q.question }}</div>
+            <el-input
+              v-model="verifyForm.answers[q.id]"
+              placeholder="請輸入答案"
+              class="verify-input"
+            />
+          </div>
         </div>
       </div>
 
-      <el-button :loading="verifying" type="primary" class="verify-submit" @click.native.prevent="handleVerify">完成驗證並登錄</el-button>
-      <div class="verify-back" @click="backToLogin">返回重新輸入帳號密碼</div>
+      <div class="verify-actions">
+        <el-button :loading="verifying" type="primary" class="verify-submit" @click.native.prevent="handleVerify">完成驗證並登錄</el-button>
+        <div class="verify-back" @click="backToLogin"><i class="el-icon-back" />返回重新輸入帳號密碼</div>
+      </div>
     </div>
   </div>
 </template>
@@ -492,41 +498,121 @@ $light_gray:#eee;
 
   /* ===== 第二步：安全驗證 ===== */
   .verify-form {
-    padding-top: 120px;
-    padding-bottom: 40px;
+    width: 480px;
+    padding: 60px 35px 40px;
+    max-height: 100vh;
+    overflow-y: auto;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 3px;
+    }
+
+    .logo-container {
+      margin-bottom: 22px;
+    }
 
     .verify-head {
       text-align: center;
       margin-bottom: 24px;
 
+      .verify-badge {
+        width: 46px;
+        height: 46px;
+        margin: 0 auto 12px;
+        border-radius: 50%;
+        background: rgba(64, 158, 255, 0.14);
+        border: 1px solid rgba(64, 158, 255, 0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        i {
+          font-size: 22px;
+          color: #409eff;
+        }
+      }
+
       .verify-title {
         font-size: 24px;
         color: $light_gray;
-        margin: 0 0 10px;
+        margin: 0 0 8px;
         font-weight: bold;
       }
 
       .verify-sub {
-        margin: 0;
+        margin: 0 0 10px;
         font-size: 13px;
         color: $dark_gray;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0 6px;
-
-        .verify-step {
-          color: #409eff;
-        }
       }
+
+      .verify-step {
+        display: inline-block;
+        padding: 2px 12px;
+        font-size: 12px;
+        color: #409eff;
+        background: rgba(64, 158, 255, 0.12);
+        border: 1px solid rgba(64, 158, 255, 0.3);
+        border-radius: 10px;
+      }
+    }
+
+    .verify-body {
+      margin-bottom: 20px;
     }
 
     .verify-block {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
-      padding: 14px 16px 16px;
-      margin-bottom: 16px;
+      border-radius: 10px;
+      padding: 16px 18px 18px;
+      margin-bottom: 14px;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+
+      .verify-block-head {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 12px;
+      }
+
+      .verify-ico {
+        flex: none;
+        width: 32px;
+        height: 32px;
+        margin-right: 10px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+
+        &.is-sms {
+          color: #409eff;
+          background: rgba(64, 158, 255, 0.12);
+        }
+
+        &.is-email {
+          color: #67c23a;
+          background: rgba(103, 194, 58, 0.12);
+        }
+
+        &.is-question {
+          color: #e6a23c;
+          background: rgba(230, 162, 60, 0.12);
+        }
+      }
+
+      .verify-block-title {
+        flex: 1;
+        min-width: 0;
+      }
 
       .verify-label {
         display: flex;
@@ -534,42 +620,83 @@ $light_gray:#eee;
         color: $light_gray;
         font-size: 15px;
         font-weight: 600;
-        margin-bottom: 6px;
+        line-height: 1.4;
+      }
 
-        i {
-          margin-right: 8px;
-          color: #409eff;
-          font-size: 17px;
-        }
-
-        .verify-req {
-          margin-left: auto;
-          font-style: normal;
-          font-size: 12px;
-          font-weight: normal;
-          color: #e6a23c;
-          border: 1px solid rgba(230, 162, 60, 0.6);
-          border-radius: 3px;
-          padding: 0 6px;
-          line-height: 18px;
-        }
+      .verify-req {
+        margin-left: 8px;
+        font-style: normal;
+        font-size: 12px;
+        font-weight: normal;
+        color: #e6a23c;
+        border: 1px solid rgba(230, 162, 60, 0.6);
+        border-radius: 3px;
+        padding: 0 6px;
+        line-height: 18px;
       }
 
       .verify-desc {
+        margin-top: 4px;
         font-size: 12px;
         color: $dark_gray;
-        margin-bottom: 10px;
+        line-height: 1.5;
       }
 
       .verify-input {
         width: 100% !important;
+        height: 44px;
+
+        ::v-deep .el-input__inner {
+          height: 44px;
+          line-height: 44px;
+          padding: 0 14px;
+          background: rgba(255, 255, 255, 0.07);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-right: 0;
+          border-radius: 6px 0 0 6px;
+          color: #fff;
+          font-size: 14px;
+
+          &::placeholder {
+            color: rgba(255, 255, 255, 0.35);
+          }
+
+          &:focus {
+            border-color: #409eff;
+          }
+        }
 
         ::v-deep .el-input-group__append {
+          padding: 0;
           background: transparent;
-          border: 1px solid rgba(255, 255, 255, 0.15);
+          border: 1px solid rgba(255, 255, 255, 0.14);
           border-left: 0;
-          color: #409eff;
-          cursor: pointer;
+          border-radius: 0 6px 6px 0;
+          overflow: hidden;
+
+          .code-btn {
+            min-width: 112px;
+            height: 42px;
+            padding: 0 14px;
+            border: 0;
+            border-radius: 0;
+            background: rgba(64, 158, 255, 0.16);
+            color: #66b1ff;
+            font-size: 13px;
+
+            &:hover,
+            &:focus {
+              background: rgba(64, 158, 255, 0.28);
+              color: #fff;
+            }
+
+            &.is-disabled,
+            &.is-disabled:hover,
+            &.is-disabled:focus {
+              background: rgba(255, 255, 255, 0.05);
+              color: rgba(255, 255, 255, 0.35);
+            }
+          }
         }
       }
 
@@ -577,6 +704,10 @@ $light_gray:#eee;
         margin-top: 8px;
         font-size: 12px;
         color: #67c23a;
+
+        i {
+          margin-right: 4px;
+        }
       }
 
       .question-item {
@@ -592,23 +723,37 @@ $light_gray:#eee;
           margin-bottom: 6px;
           line-height: 1.5;
         }
+
+        .verify-input ::v-deep .el-input__inner {
+          border-right: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 6px;
+        }
       }
     }
 
-    .verify-submit {
-      width: 100%;
-      margin-top: 8px;
-    }
+    .verify-actions {
+      .verify-submit {
+        width: 100%;
+        height: 44px;
+        font-size: 15px;
+        border-radius: 6px;
+      }
 
-    .verify-back {
-      text-align: center;
-      margin-top: 14px;
-      font-size: 13px;
-      color: $dark_gray;
-      cursor: pointer;
+      .verify-back {
+        text-align: center;
+        margin-top: 14px;
+        font-size: 13px;
+        color: $dark_gray;
+        cursor: pointer;
+        user-select: none;
 
-      &:hover {
-        color: #409eff;
+        &:hover {
+          color: #409eff;
+        }
+
+        i {
+          margin-right: 4px;
+        }
       }
     }
   }
