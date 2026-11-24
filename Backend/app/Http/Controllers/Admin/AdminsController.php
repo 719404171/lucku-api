@@ -285,12 +285,17 @@ class AdminsController extends Controller
 
     /**
      * 校驗登錄驗證碼（短信 / 郵箱）
+     * 僅校驗，不標記已使用；待全部驗證通過後由調用方統一寫 used_at
      * @param int $adminId
      * @param string $channel sms|email
      * @param string $code
+     * @param int|null $codeId 校驗通過時返回驗證碼記錄 id
+     * @param bool|null $isMismatch 是否為驗證碼不匹配（用於失敗計數）
      * @return true|string true 表示通過，字符串為錯誤提示
      */
-    private static function verifyCode($adminId, $channel, $code){
+    private static function verifyCode($adminId, $channel, $code, &$codeId = null, &$isMismatch = null){
+        $codeId = null;
+        $isMismatch = false;
         $row = DB::table('admin_sms_code')
             ->where('admin_id',$adminId)
             ->where('channel',$channel)
@@ -298,22 +303,20 @@ class AdminsController extends Controller
             ->orderByDesc('id')
             ->first();
         if(empty($row)){
-            return __('web.sms_code_required');
+            return $channel === 'email' ? __('web.email_code_required') : __('web.sms_code_required');
         }
         if(strtotime($row->expire_at) < time()){
-            return __('web.sms_code_expired');
+            return $channel === 'email' ? __('web.email_code_expired') : __('web.sms_code_expired');
         }
         if((int)$row->attempts >= 5){
-            return __('web.sms_code_locked');
+            return $channel === 'email' ? __('web.email_code_locked') : __('web.sms_code_locked');
         }
         if(!hash_equals($row->code_hash, hash('sha256', trim((string)$code)))){
             DB::table('admin_sms_code')->where('id',$row->id)->increment('attempts');
-            return __('web.sms_code_error');
+            $isMismatch = true;
+            return $channel === 'email' ? __('web.email_code_error') : __('web.sms_code_error');
         }
-        DB::table('admin_sms_code')->where('id',$row->id)->update([
-            'used_at'    => date('Y-m-d H:i:s'),
-            'updated_at' => date('Y-m-d H:i:s'),
-        ]);
+        $codeId = (int)$row->id;
         return true;
     }
 
@@ -324,7 +327,8 @@ class AdminsController extends Controller
      * @param array $answers
      * @return true|string
      */
-    private static function verifyAnswers($adminId, $questionId, array $answers){
+    private static function verifyAnswers($adminId, $questionId, array $answers, &$isMismatch = null){
+        $isMismatch = false;
         $row = DB::table('admin_security_question')
             ->where('id',(int)$questionId)
             ->where('admin_id',$adminId)
@@ -345,6 +349,7 @@ class AdminsController extends Controller
             return __('web.admin_question_required');
         }
         if(!Hash::check($answer, (string)$row->answer_hash)){
+            $isMismatch = true;
             return __('web.admin_question_error');
         }
         return true;
@@ -406,8 +411,9 @@ class AdminsController extends Controller
             return $this->parametersError();
         }
 
-        // 登錄失敗限流：同一帳號 10 分鐘內失敗 5 次即鎖定
+        // 登錄失敗限流：同一帳號 10 分鐘內密碼錯誤 5 次即鎖定（不含二次驗證失敗）
         $failCount = AdminLog::where('login_admin_name',$username)
+            ->where('login_admin_id',0)
             ->where('login_status',0)
             ->where('created_at','>=',date('Y-m-d H:i:s', time() - 600))
             ->count();
@@ -539,18 +545,24 @@ class AdminsController extends Controller
         }
 
         $methods = $ctx->methods;
+        $usedCodeIds = [];
 
         if(in_array('sms',$methods,true)){
             $smsCode = trim((string)$request->input('sms_code'));
             if($smsCode === ''){
                 return $this->error(__('web.sms_code_required'));
             }
-            $check = self::verifyCode($hasAdmin->admin_id, 'sms', $smsCode);
+            $smsCodeId = null;
+            $isMismatch = false;
+            $check = self::verifyCode($hasAdmin->admin_id, 'sms', $smsCode, $smsCodeId, $isMismatch);
             if($check !== true){
-                self::bumpChallenge($challenge);
-                self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
+                if($isMismatch){
+                    self::bumpChallenge($challenge);
+                    self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
+                }
                 return $this->error($check);
             }
+            $usedCodeIds[] = $smsCodeId;
         }
 
         if(in_array('email',$methods,true)){
@@ -558,12 +570,17 @@ class AdminsController extends Controller
             if($emailCode === ''){
                 return $this->error(__('web.email_code_required'));
             }
-            $check = self::verifyCode($hasAdmin->admin_id, 'email', $emailCode);
+            $emailCodeId = null;
+            $isMismatch = false;
+            $check = self::verifyCode($hasAdmin->admin_id, 'email', $emailCode, $emailCodeId, $isMismatch);
             if($check !== true){
-                self::bumpChallenge($challenge);
-                self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
+                if($isMismatch){
+                    self::bumpChallenge($challenge);
+                    self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
+                }
                 return $this->error($check);
             }
+            $usedCodeIds[] = $emailCodeId;
         }
 
         if(in_array('question',$methods,true)){
@@ -574,12 +591,24 @@ class AdminsController extends Controller
             if(!is_array($answers)){
                 $answers = [];
             }
-            $check = self::verifyAnswers($hasAdmin->admin_id, $ctx->question_id, $answers);
+            $isMismatch = false;
+            $check = self::verifyAnswers($hasAdmin->admin_id, $ctx->question_id, $answers, $isMismatch);
             if($check !== true){
-                self::bumpChallenge($challenge);
-                self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
+                if($isMismatch){
+                    self::bumpChallenge($challenge);
+                    self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
+                }
                 return $this->error($check);
             }
+        }
+
+        // 全部驗證通過後才作廢已使用的驗證碼，避免部分驗證失敗時碼被白白燒掉
+        $usedCodeIds = array_values(array_filter($usedCodeIds));
+        if(!empty($usedCodeIds)){
+            DB::table('admin_sms_code')->whereIn('id',$usedCodeIds)->whereNull('used_at')->update([
+                'used_at'    => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
         }
 
         self::dropChallenge($challenge);
