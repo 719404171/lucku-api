@@ -36,7 +36,11 @@ class AliyunSmsService
         $keyId     = (string)($cfg['access_key_id'] ?? '');
         $keySecret = (string)($cfg['access_key_secret'] ?? '');
         $senderId  = (string)($cfg['sender_id'] ?? '');
-        $endpoint  = (string)($cfg['endpoint'] ?? 'dysmsapi.aliyuncs.com');
+        // SendMessageToGlobe 必須走國際站域名；使用國內域名 dysmsapi.aliyuncs.com 會返回 ServiceUnavailable
+        $endpoint  = (string)($cfg['endpoint'] ?? '');
+        if ($endpoint === '' || $endpoint === 'dysmsapi.aliyuncs.com') {
+            $endpoint = 'dysmsapi.ap-southeast-1.aliyuncs.com';
+        }
 
         if ($keyId === '' || $keySecret === '' || $senderId === '') {
             return ['success' => false, 'error' => '未配置阿里雲短信 AccessKey / SenderID'];

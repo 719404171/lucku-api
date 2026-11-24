@@ -142,7 +142,7 @@ return [
     'aliyun_sms' => [
         'access_key_id'     => env('ALIYUN_SMS_ACCESS_KEY_ID', ''),
         'access_key_secret' => env('ALIYUN_SMS_ACCESS_KEY_SECRET', ''),
-        'endpoint'          => env('ALIYUN_SMS_ENDPOINT', 'dysmsapi.aliyuncs.com'),
+        'endpoint'          => env('ALIYUN_SMS_ENDPOINT', 'dysmsapi.ap-southeast-1.aliyuncs.com'),
         'sender_id'         => env('ALIYUN_SMS_SENDER_ID', ''),
         'message'           => env('ALIYUN_SMS_MESSAGE', '您的驗證碼為{code}，5分鐘內有效，請勿洩露。'),
         'type'              => env('ALIYUN_SMS_TYPE', 'OTP'),
