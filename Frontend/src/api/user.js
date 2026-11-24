@@ -60,6 +60,15 @@ export function editAdminProfile(data) {
   })
 }
 
+// 個人中心：修改頭像
+export function editAdminAvatar(data) {
+  return request({
+    url: '/editAdminAvatarWeb',
+    method: 'post',
+    data
+  })
+}
+
 // 個人中心：保存安全問題（多個）
 export function saveAdminQuestion(data) {
   return request({

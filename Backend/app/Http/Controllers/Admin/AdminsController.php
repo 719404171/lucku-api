@@ -270,39 +270,34 @@ class AdminsController extends Controller
     }
 
     /**
-     * 校驗安全問題（要求全部答對）
+     * 校驗安全問題（登錄時隨機抽取一題，只需答對該題）
      * @param int $adminId
+     * @param int $questionId
      * @param array $answers
      * @return true|string
      */
-    private static function verifyAnswers($adminId, array $answers){
-        $questions = DB::table('admin_security_question')
+    private static function verifyAnswers($adminId, $questionId, array $answers){
+        $row = DB::table('admin_security_question')
+            ->where('id',(int)$questionId)
             ->where('admin_id',$adminId)
             ->where('status',1)
-            ->orderBy('sort')
-            ->orderBy('id')
-            ->get();
-        if($questions->isEmpty()){
+            ->first();
+        if(empty($row)){
             return __('web.admin_question_not_set');
         }
-        $map = [];
+        $answer = '';
         foreach($answers as $a){
-            if(isset($a['id'])){
-                $map[(int)$a['id']] = (string)($a['answer'] ?? '');
+            if(isset($a['id']) && (int)$a['id'] === (int)$questionId){
+                $answer = (string)($a['answer'] ?? '');
+                break;
             }
         }
-        foreach($questions as $q){
-            $id = (int)$q->id;
-            if(!array_key_exists($id, $map)){
-                return __('web.admin_question_required');
-            }
-            $answer = self::normalizeAnswer($map[$id]);
-            if($answer === ''){
-                return __('web.admin_question_required');
-            }
-            if(!Hash::check($answer, (string)$q->answer_hash)){
-                return __('web.admin_question_error');
-            }
+        $answer = self::normalizeAnswer($answer);
+        if($answer === ''){
+            return __('web.admin_question_required');
+        }
+        if(!Hash::check($answer, (string)$row->answer_hash)){
+            return __('web.admin_question_error');
         }
         return true;
     }
@@ -399,8 +394,9 @@ class AdminsController extends Controller
             }
         }
         $questions = [];
+        $questionId = 0;
         if(in_array('question',$methods,true)){
-            $questions = DB::table('admin_security_question')
+            $all = DB::table('admin_security_question')
                 ->where('admin_id',$hasAdmin->admin_id)
                 ->where('status',1)
                 ->orderBy('sort')
@@ -408,20 +404,25 @@ class AdminsController extends Controller
                 ->select('id','question')
                 ->get()
                 ->toArray();
-            if(empty($questions)){
+            if(empty($all)){
                 return $this->error(__('web.admin_question_not_set'));
             }
+            // 隨機抽取一題，登錄時只需回答該題
+            $pick = $all[array_rand($all)];
+            $questionId = (int)$pick->id;
+            $questions = [$pick];
         }
 
         // 生成一次性 challenge，10 分鐘內有效
         $challenge = bin2hex(random_bytes(24));
         Cache::put(self::challengeKey($challenge), [
-            'admin_id' => $hasAdmin->admin_id,
-            'username' => $hasAdmin->username,
-            'methods'  => $methods,
-            'attempts' => 0,
-            'ip'       => (string)$request->ip(),
-            'issued'   => time(),
+            'admin_id'    => $hasAdmin->admin_id,
+            'username'    => $hasAdmin->username,
+            'methods'     => $methods,
+            'question_id' => $questionId,
+            'attempts'    => 0,
+            'ip'          => (string)$request->ip(),
+            'issued'      => time(),
         ], 600);
 
         return $this->success(__('web.success'), [
@@ -496,7 +497,7 @@ class AdminsController extends Controller
             if(!is_array($answers)){
                 $answers = [];
             }
-            $check = self::verifyAnswers($hasAdmin->admin_id, $answers);
+            $check = self::verifyAnswers($hasAdmin->admin_id, (int)($ctx['question_id'] ?? 0), $answers);
             if($check !== true){
                 self::bumpChallenge($key, $ctx);
                 return $this->error($check);
@@ -761,6 +762,7 @@ class AdminsController extends Controller
         return $this->success(__('web.success'), [
             'admin_id'         => $admin->admin_id,
             'username'         => $admin->username,
+            'avatar'           => (string)$admin->avatar,
             'email'            => (string)$admin->email,
             'phone'            => (string)$admin->phone,
             'questions'        => $questions,
@@ -768,6 +770,28 @@ class AdminsController extends Controller
             'email_enabled'    => self::adminSwitch('admin_email_enabled'),
             'question_enabled' => self::adminSwitch('admin_question_enabled'),
         ]);
+    }
+
+    /**
+     * 修改當前管理員頭像
+     * @param Request $request
+     * @return array
+     */
+    public function editAdminAvatarWeb(Request $request){
+        $token = $request->header('TOKEN');
+        $admin = Admins::where('token',hash('sha256',$token))->first();
+        if(empty($admin)){
+            return $this->error(__('web.login_error'));
+        }
+        $avatar = trim((string)$request->input('avatar',''));
+        if($avatar === '' || mb_strlen($avatar) > 500 || !preg_match('#^https?://#i', $avatar)){
+            return $this->parametersError();
+        }
+        $state = Admins::where('admin_id',$admin->admin_id)->update(['avatar'=>$avatar]);
+        if($state === false){
+            return $this->error(__('web.edit_fail'));
+        }
+        return $this->success(__('web.edit_success'), ['avatar'=>$avatar]);
     }
 
     /**

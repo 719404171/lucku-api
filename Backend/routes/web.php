@@ -40,6 +40,7 @@ Route::group(['middleware'=>['RefreshToken','AdminOperation']],function (){    /
     Route::post("editAdminPasswordWeb", "Admin\AdminsController@editAdminPasswordWeb");//修改當前管理員密碼
     Route::get("getAdminProfileWeb", "Admin\AdminsController@getAdminProfileWeb");//獲取當前管理員個人資料
     Route::post("editAdminProfileWeb", "Admin\AdminsController@editAdminProfileWeb");//修改綁定手機/郵箱
+    Route::post("editAdminAvatarWeb", "Admin\AdminsController@editAdminAvatarWeb");//修改管理員頭像
     Route::post("saveAdminQuestionWeb", "Admin\AdminsController@saveAdminQuestionWeb");//保存安全問題（多個）
     Route::post("deleteAdminWeb", "Admin\AdminsController@deleteAdminWeb");//刪除管理員
     /***************************************** 規格分類管理 **************************************************************/

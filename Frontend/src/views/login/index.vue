@@ -62,7 +62,7 @@
 
       <div class="verify-body">
         <!-- 短信驗證 -->
-        <div v-if="hasSms" class="verify-block">
+        <div v-if="hasSms" class="verify-block is-sms">
           <div class="verify-block-head">
             <span class="verify-ico is-sms"><i class="el-icon-mobile-phone" /></span>
             <div class="verify-block-title">
@@ -88,7 +88,7 @@
         </div>
 
         <!-- 郵箱驗證 -->
-        <div v-if="hasEmail" class="verify-block">
+        <div v-if="hasEmail" class="verify-block is-email">
           <div class="verify-block-head">
             <span class="verify-ico is-email"><i class="el-icon-message" /></span>
             <div class="verify-block-title">
@@ -110,23 +110,24 @@
               @click.native.prevent="handleSendCode('email')"
             >{{ emailCountdown > 0 ? emailCountdown + 's' : '獲取驗證碼' }}</el-button>
           </el-input>
+          <div class="verify-hint"><i class="el-icon-info" />驗證碼 10 分鐘內有效，若未收到請檢查垃圾郵件</div>
           <div v-if="emailTip" class="verify-tip"><i class="el-icon-success" />{{ emailTip }}</div>
         </div>
 
         <!-- 安全問題 -->
-        <div v-if="hasQuestion" class="verify-block">
+        <div v-if="hasQuestion" class="verify-block is-question">
           <div class="verify-block-head">
             <span class="verify-ico is-question"><i class="el-icon-question" /></span>
             <div class="verify-block-title">
-              <div class="verify-label">安全問題<em class="verify-req">全部答對</em></div>
-              <div class="verify-desc">請回答以下全部安全問題</div>
+              <div class="verify-label">安全問題<em class="verify-req">隨機一題</em></div>
+              <div class="verify-desc">系統已隨機抽取一題，答對即可通過</div>
             </div>
           </div>
           <div v-for="(q, idx) in (challenge.questions || [])" :key="q.id" class="question-item">
             <div class="question-text">{{ idx + 1 }}. {{ q.question }}</div>
             <el-input
               v-model="verifyForm.answers[q.id]"
-              placeholder="請輸入答案"
+              placeholder="請輸入該問題的答案"
               class="verify-input"
             />
           </div>
@@ -326,7 +327,7 @@ export default {
         for (let i = 0; i < questions.length; i++) {
           const val = (this.verifyForm.answers[questions[i].id] || '').trim()
           if (!val) {
-            this.$message.warning('請回答所有安全問題')
+            this.$message.warning('請回答安全問題')
             return
           }
         }
@@ -572,6 +573,18 @@ $light_gray:#eee;
       padding: 16px 18px 18px;
       margin-bottom: 14px;
 
+      &.is-sms {
+        border-left: 3px solid rgba(64, 158, 255, 0.85);
+      }
+
+      &.is-email {
+        border-left: 3px solid rgba(103, 194, 58, 0.85);
+      }
+
+      &.is-question {
+        border-left: 3px solid rgba(230, 162, 60, 0.85);
+      }
+
       &:last-child {
         margin-bottom: 0;
       }
@@ -680,23 +693,34 @@ $light_gray:#eee;
             padding: 0 14px;
             border: 0;
             border-radius: 0;
-            background: rgba(64, 158, 255, 0.16);
-            color: #66b1ff;
+            background: #409eff;
+            color: #fff;
             font-size: 13px;
 
             &:hover,
             &:focus {
-              background: rgba(64, 158, 255, 0.28);
+              background: #66b1ff;
               color: #fff;
             }
 
             &.is-disabled,
             &.is-disabled:hover,
             &.is-disabled:focus {
-              background: rgba(255, 255, 255, 0.05);
+              background: rgba(255, 255, 255, 0.06);
               color: rgba(255, 255, 255, 0.35);
             }
           }
+        }
+      }
+
+      .verify-hint {
+        margin-top: 8px;
+        font-size: 12px;
+        color: $dark_gray;
+        line-height: 1.5;
+
+        i {
+          margin-right: 4px;
         }
       }
 

@@ -16,6 +16,22 @@
       />
 
       <el-form :model="profileForm" label-width="120px" class="profile-form">
+        <el-form-item label="頭像">
+          <el-upload
+            class="avatar-uploader"
+            action="#"
+            :show-file-list="false"
+            :before-upload="beforeAvatarUpload"
+            :http-request="uploadAvatar"
+          >
+            <div v-loading="avatarUploading" class="avatar-box">
+              <img v-if="profile.avatar" :src="profile.avatar" class="avatar-img">
+              <i v-else class="el-icon-plus avatar-uploader-icon" />
+              <div class="avatar-mask"><i class="el-icon-camera" /><span>更換頭像</span></div>
+            </div>
+          </el-upload>
+          <div class="field-tip">支持 JPG / PNG / GIF / WEBP，大小不超過 2MB</div>
+        </el-form-item>
         <el-form-item label="綁定手機">
           <el-input v-model="profileForm.phone" maxlength="8" placeholder="香港 8 位手機號，例如 98839669" style="width: 320px;" />
           <div class="field-tip">用於接收後台登錄短信驗證碼</div>
@@ -71,7 +87,8 @@
 </template>
 
 <script>
-import { getAdminProfile, editAdminProfile, saveAdminQuestion } from '@/api/user'
+import { getAdminProfile, editAdminProfile, saveAdminQuestion, editAdminAvatar } from '@/api/user'
+import { reqUpload } from '@/api'
 
 export default {
   name: 'AdminProfile',
@@ -79,6 +96,7 @@ export default {
     return {
       profile: {
         username: '',
+        avatar: '',
         email: '',
         phone: '',
         sms_enabled: 0,
@@ -95,7 +113,8 @@ export default {
         password: ''
       },
       savingProfile: false,
-      savingQuestions: false
+      savingQuestions: false,
+      avatarUploading: false
     }
   },
   computed: {
@@ -122,6 +141,38 @@ export default {
           question: q.question,
           answer: ''
         }))
+      })
+    },
+    beforeAvatarUpload(file) {
+      const isImage = /^image\/(jpeg|png|gif|webp)$/.test(file.type)
+      const isLt2M = file.size / 1024 / 1024 < 2
+      if (!isImage) {
+        this.$message.error('只能上傳 JPG / PNG / GIF / WEBP 格式的圖片')
+        return false
+      }
+      if (!isLt2M) {
+        this.$message.error('圖片大小不能超過 2MB')
+        return false
+      }
+      return true
+    },
+    uploadAvatar(option) {
+      const formData = new FormData()
+      formData.append('file', option.file)
+      this.avatarUploading = true
+      reqUpload(formData).then(response => {
+        const url = (response.results || {}).file_path
+        if (!url) {
+          this.$message.error('上傳失敗，請稍後重試')
+          return
+        }
+        return editAdminAvatar({ avatar: url }).then(() => {
+          this.profile.avatar = url
+          this.$store.commit('user/SET_AVATAR', url)
+          this.$message.success('頭像已更新')
+        })
+      }).catch(() => {}).finally(() => {
+        this.avatarUploading = false
       })
     },
     addQuestion() {
@@ -225,6 +276,65 @@ export default {
     font-size: 12px;
     color: #909399;
     line-height: 1.6;
+  }
+
+  .avatar-uploader {
+    .avatar-box {
+      position: relative;
+      width: 88px;
+      height: 88px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px dashed #d9d9d9;
+      background: #fafbfc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.2s;
+
+      &:hover {
+        border-color: #409eff;
+
+        .avatar-mask {
+          opacity: 1;
+        }
+      }
+
+      .avatar-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .avatar-uploader-icon {
+        font-size: 24px;
+        color: #c0c4cc;
+      }
+
+      .avatar-mask {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.45);
+        color: #fff;
+        font-size: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.2s;
+
+        i {
+          font-size: 18px;
+          margin-bottom: 4px;
+        }
+      }
+    }
   }
 
   .empty-tip {
