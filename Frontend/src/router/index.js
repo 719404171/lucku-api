@@ -88,6 +88,20 @@ export const constantRoutes = [
         meta: { title: 'CreateOrder', power: [] }
       }
     ]
+  },
+  {
+    // 個人中心：修改綁定手機/郵箱、設置安全問題
+    path: '/admin',
+    component: Layout,
+    hidden: true,
+    children: [
+      {
+        path: 'profile',
+        component: () => import('@/views/admin/profile/index'),
+        name: 'AdminProfile',
+        meta: { title: '個人中心' }
+      }
+    ]
   }
 ]
 

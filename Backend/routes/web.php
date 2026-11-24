@@ -13,8 +13,10 @@
 
 
 Route::get("getAdminLoginConfigWeb", "Admin\AdminsController@getAdminLoginConfigWeb");   //登錄頁配置（是否開啟短信驗證）
-Route::post("sendAdminLoginSms", "Admin\AdminsController@sendAdminLoginSms");   //發送登錄短信驗證碼
-Route::post("AdminLoginWeb", "Admin\AdminsController@AdminLoginWeb");   //登錄
+Route::post("sendAdminLoginSms", "Admin\AdminsController@sendAdminLoginSms");   //發送登錄短信驗證碼（舊接口）
+Route::post("sendAdminVerifyCode", "Admin\AdminsController@sendAdminVerifyCode");   //第二階段發送短信/郵箱驗證碼
+Route::post("AdminLoginWeb", "Admin\AdminsController@AdminLoginWeb");   //登錄（第一階段）
+Route::post("AdminVerifyLogin", "Admin\AdminsController@AdminVerifyLogin");   //登錄（第二階段：二次驗證）
 Route::post("getShopFoundationWeb", "Admin\ShopSettingController@getShopFoundationWeb");   //获取店铺基础信息
 
 
@@ -36,6 +38,9 @@ Route::group(['middleware'=>['RefreshToken','AdminOperation']],function (){    /
     Route::post("addAdminWeb", "Admin\AdminsController@addAdminWeb");//新增管理員
     Route::post("editAdminWeb", "Admin\AdminsController@editAdminWeb");//編輯管理員
     Route::post("editAdminPasswordWeb", "Admin\AdminsController@editAdminPasswordWeb");//修改當前管理員密碼
+    Route::get("getAdminProfileWeb", "Admin\AdminsController@getAdminProfileWeb");//獲取當前管理員個人資料
+    Route::post("editAdminProfileWeb", "Admin\AdminsController@editAdminProfileWeb");//修改綁定手機/郵箱
+    Route::post("saveAdminQuestionWeb", "Admin\AdminsController@saveAdminQuestionWeb");//保存安全問題（多個）
     Route::post("deleteAdminWeb", "Admin\AdminsController@deleteAdminWeb");//刪除管理員
     /***************************************** 規格分類管理 **************************************************************/
     Route::post("getSpecsSortListWeb", "Admin\SpecsController@getSpecsSortListWeb");//獲取規格分類列表

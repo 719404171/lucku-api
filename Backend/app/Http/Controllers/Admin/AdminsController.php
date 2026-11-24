@@ -22,6 +22,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\UserMessage;
 use App\Services\AliyunSmsService;
+use App\Services\MailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -46,50 +47,99 @@ class AdminsController extends Controller
     }
 
     /**
-     * 登錄頁配置：是否開啟短信驗證
+     * 登錄頁配置：分別返回短信 / 郵箱 / 安全問題驗證開關
      * @return array
      */
     public function getAdminLoginConfigWeb(){
         return $this->success(__('web.success'), [
-            'sms_enabled' => self::adminSmsEnabled(),
+            'sms_enabled'      => self::adminSwitch('admin_sms_enabled'),
+            'email_enabled'    => self::adminSwitch('admin_email_enabled'),
+            'question_enabled' => self::adminSwitch('admin_question_enabled'),
         ]);
     }
 
     /**
-     * 發送後台登錄短信驗證碼（先校驗帳號密碼，避免被用來刷短信）
+     * 發送後台登錄短信驗證碼（兼容舊接口：先校驗帳號密碼）
      * @param Request $request
      * @return array
      */
     public function sendAdminLoginSms(Request $request){
-        $username = trim((string)$request->post('username'));
-        $password = (string)$request->post('password');
+        $username = trim((string)$request->input('username'));
+        $password = (string)$request->input('password');
         if($username === '' || $password === ''){
             return $this->parametersError();
         }
-        $smsConfig = config('services.aliyun_sms');
         if(!self::adminSmsEnabled()){
             return $this->error(__('web.sms_not_enabled'));
         }
-
         $hasAdmin = Admins::where('username',$username)->where('status',1)->first();
         if(empty($hasAdmin) || !self::checkAdminPassword($hasAdmin, $password)){
             self::writeLoginFailLog($request, $username, __('web.login_error'));
             return $this->error(__('web.login_error'));
         }
+        return $this->dispatchVerifyCode($hasAdmin, 'sms', $request);
+    }
 
-        $phone = trim((string)$hasAdmin->phone);
-        if(!preg_match('/^[4-9]\d{7}$/', $phone)){
-            return $this->error(__('web.sms_phone_invalid'));
+    /**
+     * 第二階段：按 challenge 發送驗證碼（短信 / 郵箱）
+     * @param Request $request
+     * @return array
+     */
+    public function sendAdminVerifyCode(Request $request){
+        $challenge = trim((string)$request->input('challenge_token'));
+        $channel = trim((string)$request->input('channel'));
+        if($challenge === '' || !in_array($channel, ['sms','email'], true)){
+            return $this->parametersError();
+        }
+        $ctx = Cache::get(self::challengeKey($challenge));
+        if(empty($ctx)){
+            return $this->error(__('web.verify_expired'));
+        }
+        if(!in_array($channel, $ctx['methods'] ?? [], true)){
+            return $this->error(__('web.verify_channel_off'));
+        }
+        $hasAdmin = Admins::where('admin_id',$ctx['admin_id'])->where('status',1)->first();
+        if(empty($hasAdmin)){
+            return $this->error(__('web.login_error'));
+        }
+        return $this->dispatchVerifyCode($hasAdmin, $channel, $request);
+    }
+
+    /**
+     * 生成並發送驗證碼（短信 / 郵箱）
+     * @param Admins $hasAdmin
+     * @param string $channel
+     * @param Request $request
+     * @return array
+     */
+    private function dispatchVerifyCode($hasAdmin, $channel, Request $request){
+        $smsConfig = config('services.aliyun_sms');
+
+        if($channel === 'sms'){
+            $target = trim((string)$hasAdmin->phone);
+            if(!preg_match('/^[4-9]\d{7}$/', $target)){
+                return $this->error(__('web.sms_phone_invalid'));
+            }
+        }else{
+            $target = trim((string)$hasAdmin->email);
+            if(!filter_var($target, FILTER_VALIDATE_EMAIL)){
+                return $this->error(__('web.admin_email_not_bound'));
+            }
         }
 
-        // 重發間隔
-        $last = DB::table('admin_sms_code')->where('admin_id',$hasAdmin->admin_id)->orderByDesc('id')->first();
+        // 重發間隔（按渠道獨立計算）
+        $last = DB::table('admin_sms_code')
+            ->where('admin_id',$hasAdmin->admin_id)
+            ->where('channel',$channel)
+            ->orderByDesc('id')
+            ->first();
         if(!empty($last) && strtotime($last->created_at) > time() - (int)$smsConfig['resend_interval']){
             return $this->error(__('web.sms_too_frequent'));
         }
         // 每小時上限
         $hourCount = DB::table('admin_sms_code')
             ->where('admin_id',$hasAdmin->admin_id)
+            ->where('channel',$channel)
             ->where('created_at','>=',date('Y-m-d H:i:s', time() - 3600))
             ->count();
         if($hourCount >= (int)$smsConfig['hour_limit']){
@@ -97,17 +147,49 @@ class AdminsController extends Controller
         }
 
         $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $send = AliyunSmsService::sendCode($phone, $code);
-        if(empty($send['success'])){
-            return $this->error(__('web.sms_send_fail'), $send['error'] ?? '');
+
+        if($channel === 'sms'){
+            $send = AliyunSmsService::sendCode($target, $code);
+            if(empty($send['success'])){
+                return $this->error(__('web.sms_send_fail'), $send['error'] ?? '');
+            }
+        }else{
+            try{
+                $appName  = (string)config('services.basics.base_name', 'Lucku');
+                $fromAddr = (string)config('mail.mailers.smtp.username', '');
+                $res = MailService::send('emails.verifyCode', [
+                    'info' => [
+                        'Email'   => $target,
+                        'Subject' => '後台登錄驗證碼',
+                        'Message' => '您的後台登錄驗證碼為：',
+                        'Code'    => $code,
+                    ],
+                ], [
+                    'to'        => $target,
+                    'subject'   => '後台登錄驗證碼',
+                    'from'      => $fromAddr ?: config('mail.from.address'),
+                    'from_name' => $appName,
+                ]);
+                if(empty($res['success'])){
+                    return $this->error(__('web.email_send_fail'), $res['error'] ?? '');
+                }
+            }catch(\Throwable $e){
+                return $this->error(__('web.email_send_fail'), $e->getMessage());
+            }
         }
 
-        // 發送成功才落庫，並作廢該帳號未使用的舊驗證碼
+        // 發送成功才落庫，並作廢該渠道未使用的舊驗證碼
         $now = date('Y-m-d H:i:s');
-        DB::table('admin_sms_code')->where('admin_id',$hasAdmin->admin_id)->whereNull('used_at')->delete();
+        DB::table('admin_sms_code')
+            ->where('admin_id',$hasAdmin->admin_id)
+            ->where('channel',$channel)
+            ->whereNull('used_at')
+            ->delete();
         DB::table('admin_sms_code')->insert([
             'admin_id'   => $hasAdmin->admin_id,
-            'phone'      => $phone,
+            'phone'      => $channel === 'sms' ? $target : '',
+            'channel'    => $channel,
+            'target'     => $target,
             'code_hash'  => hash('sha256', $code),
             'expire_at'  => date('Y-m-d H:i:s', time() + (int)$smsConfig['code_expire']),
             'attempts'   => 0,
@@ -118,20 +200,52 @@ class AdminsController extends Controller
         ]);
 
         return $this->success(__('web.sms_send_success'), [
-            'phone'  => substr($phone, 0, 3) . '****' . substr($phone, -2),
-            'expire' => (int)$smsConfig['code_expire'],
+            'channel' => $channel,
+            'target'  => $channel === 'sms' ? self::maskPhone($target) : self::maskEmail($target),
+            'expire'  => (int)$smsConfig['code_expire'],
         ]);
     }
 
     /**
-     * 校驗登錄短信驗證碼
+     * challenge 緩存 key
+     * @param string $challenge
+     * @return string
+     */
+    private static function challengeKey($challenge){
+        return 'admin_login_challenge:' . md5((string)$challenge);
+    }
+
+    /**
+     * 手機號脫敏 91234560 -> 912****60
+     */
+    private static function maskPhone($phone){
+        $phone = (string)$phone;
+        if(strlen($phone) < 5) return $phone;
+        return substr($phone, 0, 3) . '****' . substr($phone, -2);
+    }
+
+    /**
+     * 郵箱脫敏 abc@x.com -> a***@x.com
+     */
+    private static function maskEmail($email){
+        $email = (string)$email;
+        if(strpos($email, '@') === false) return $email;
+        list($name, $domain) = explode('@', $email, 2);
+        $keep = mb_substr($name, 0, 1);
+        return $keep . '***@' . $domain;
+    }
+
+    /**
+     * 校驗登錄驗證碼（短信 / 郵箱）
      * @param int $adminId
+     * @param string $channel sms|email
      * @param string $code
      * @return true|string true 表示通過，字符串為錯誤提示
      */
-    private static function verifyAdminSmsCode($adminId, $code){
+    private static function verifyCode($adminId, $channel, $code){
         $row = DB::table('admin_sms_code')
             ->where('admin_id',$adminId)
+            ->where('channel',$channel)
             ->whereNull('used_at')
             ->orderByDesc('id')
             ->first();
@@ -144,7 +258,7 @@ class AdminsController extends Controller
         if((int)$row->attempts >= 5){
             return __('web.sms_code_locked');
         }
-        if(!hash_equals($row->code_hash, hash('sha256', $code))){
+        if(!hash_equals($row->code_hash, hash('sha256', trim((string)$code)))){
             DB::table('admin_sms_code')->where('id',$row->id)->increment('attempts');
             return __('web.sms_code_error');
         }
@@ -156,29 +270,87 @@ class AdminsController extends Controller
     }
 
     /**
-     * 後台登錄短信驗證開關（後台設置頁控制）
+     * 校驗安全問題（要求全部答對）
+     * @param int $adminId
+     * @param array $answers
+     * @return true|string
+     */
+    private static function verifyAnswers($adminId, array $answers){
+        $questions = DB::table('admin_security_question')
+            ->where('admin_id',$adminId)
+            ->where('status',1)
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get();
+        if($questions->isEmpty()){
+            return __('web.admin_question_not_set');
+        }
+        $map = [];
+        foreach($answers as $a){
+            if(isset($a['id'])){
+                $map[(int)$a['id']] = (string)($a['answer'] ?? '');
+            }
+        }
+        foreach($questions as $q){
+            $id = (int)$q->id;
+            if(!array_key_exists($id, $map)){
+                return __('web.admin_question_required');
+            }
+            $answer = self::normalizeAnswer($map[$id]);
+            if($answer === ''){
+                return __('web.admin_question_required');
+            }
+            if(!Hash::check($answer, (string)$q->answer_hash)){
+                return __('web.admin_question_error');
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 答案標準化：去首尾空白、壓縮空白、轉小寫
+     * @param string $answer
+     * @return string
+     */
+    private static function normalizeAnswer($answer){
+        $answer = preg_replace('/\s+/u', ' ', trim((string)$answer));
+        return mb_strtolower((string)$answer);
+    }
+
+    /**
+     * 後台登錄驗證開關（後台設置頁控制）
      * 表/字段未就緒時按關閉處理，避免登錄頁不可用
+     * @param string $column
      * @return bool
      */
-    private static function adminSmsEnabled(){
+    private static function adminSwitch($column){
         try{
             return (int)DB::table('shop_setting')
                 ->where('shop_status','<>',-1)
                 ->orderBy('shop_id','desc')
-                ->value('admin_sms_enabled') === 1;
+                ->value($column) === 1;
         }catch(\Throwable $e){
             return false;
         }
     }
 
     /**
-     * 登錄
+     * 短信驗證開關（保持舊調用兼容）
+     * @return bool
+     */
+    private static function adminSmsEnabled(){
+        return self::adminSwitch('admin_sms_enabled');
+    }
+
+    /**
+     * 登錄（第一階段：帳號密碼）
+     * 若開啟任一二次驗證，則返回 challenge_token，進入第二階段
      * @param Request $request
      * @return array
      */
     public function AdminLoginWeb(Request $request){
-        $username = trim((string)$request->post('username'));
-        $password = (string)$request->post('password');
+        $username = trim((string)$request->input('username'));
+        $password = (string)$request->input('password');
         if($username === '' || $password === ''){
             return $this->parametersError();
         }
@@ -198,25 +370,165 @@ class AdminsController extends Controller
             return $this->error(__('web.login_error'));
         }
 
-        // 短信二次驗證（帳號密碼正確後才校驗，避免洩露帳號是否存在）
-        if(self::adminSmsEnabled()){
+        // 舊 MD5 密碼在密碼校驗通過後即升級為 bcrypt（失敗不影響登錄）
+        if(!self::isBcryptHash((string)$hasAdmin->password)){
+            Admins::where('admin_id',$hasAdmin->admin_id)->update(['password'=>Hash::make($password)]);
+        }
+
+        // 收集已開啟的二次驗證方式
+        $methods = [];
+        if(self::adminSwitch('admin_sms_enabled'))      $methods[] = 'sms';
+        if(self::adminSwitch('admin_email_enabled'))    $methods[] = 'email';
+        if(self::adminSwitch('admin_question_enabled')) $methods[] = 'question';
+
+        if(empty($methods)){
+            return $this->issueLoginToken($hasAdmin, $password, $request);
+        }
+
+        // 前置校驗：缺少綁定則直接提示，避免進入第二階段才失敗
+        if(in_array('sms',$methods,true)){
             $phone = trim((string)$hasAdmin->phone);
             if(!preg_match('/^[4-9]\d{7}$/', $phone)){
                 return $this->error(__('web.sms_phone_invalid'));
             }
-            $smsCode = trim((string)$request->post('sms_code'));
+        }
+        if(in_array('email',$methods,true)){
+            $email = trim((string)$hasAdmin->email);
+            if(!filter_var($email, FILTER_VALIDATE_EMAIL)){
+                return $this->error(__('web.admin_email_not_bound'));
+            }
+        }
+        $questions = [];
+        if(in_array('question',$methods,true)){
+            $questions = DB::table('admin_security_question')
+                ->where('admin_id',$hasAdmin->admin_id)
+                ->where('status',1)
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->select('id','question')
+                ->get()
+                ->toArray();
+            if(empty($questions)){
+                return $this->error(__('web.admin_question_not_set'));
+            }
+        }
+
+        // 生成一次性 challenge，10 分鐘內有效
+        $challenge = bin2hex(random_bytes(24));
+        Cache::put(self::challengeKey($challenge), [
+            'admin_id' => $hasAdmin->admin_id,
+            'username' => $hasAdmin->username,
+            'methods'  => $methods,
+            'attempts' => 0,
+            'ip'       => (string)$request->ip(),
+            'issued'   => time(),
+        ], 600);
+
+        return $this->success(__('web.success'), [
+            'need_verify'     => true,
+            'challenge_token' => $challenge,
+            'methods'         => $methods,
+            'phone_mask'      => self::maskPhone($hasAdmin->phone),
+            'email_mask'      => self::maskEmail($hasAdmin->email),
+            'questions'       => $questions,
+            'expire'          => 600,
+        ]);
+    }
+
+    /**
+     * 登錄（第二階段：提交二次驗證）
+     * @param Request $request
+     * @return array
+     */
+    public function AdminVerifyLogin(Request $request){
+        $challenge = trim((string)$request->input('challenge_token'));
+        if($challenge === ''){
+            return $this->parametersError();
+        }
+        $key = self::challengeKey($challenge);
+        $ctx = Cache::get($key);
+        if(empty($ctx)){
+            return $this->error(__('web.verify_expired'));
+        }
+        if((int)($ctx['attempts'] ?? 0) >= 10){
+            Cache::forget($key);
+            self::writeLoginFailLog($request, $ctx['username'] ?? '', __('web.verify_too_many'));
+            return $this->error(__('web.verify_too_many'));
+        }
+
+        $hasAdmin = Admins::where('admin_id',$ctx['admin_id'])->where('status',1)->first();
+        if(empty($hasAdmin)){
+            Cache::forget($key);
+            return $this->error(__('web.login_error'));
+        }
+
+        $methods = $ctx['methods'] ?? [];
+
+        if(in_array('sms',$methods,true)){
+            $smsCode = trim((string)$request->input('sms_code'));
             if($smsCode === ''){
                 return $this->error(__('web.sms_code_required'));
             }
-            $check = self::verifyAdminSmsCode($hasAdmin->admin_id, $smsCode);
+            $check = self::verifyCode($hasAdmin->admin_id, 'sms', $smsCode);
             if($check !== true){
+                self::bumpChallenge($key, $ctx);
                 return $this->error($check);
             }
         }
 
+        if(in_array('email',$methods,true)){
+            $emailCode = trim((string)$request->input('email_code'));
+            if($emailCode === ''){
+                return $this->error(__('web.email_code_required'));
+            }
+            $check = self::verifyCode($hasAdmin->admin_id, 'email', $emailCode);
+            if($check !== true){
+                self::bumpChallenge($key, $ctx);
+                return $this->error($check);
+            }
+        }
+
+        if(in_array('question',$methods,true)){
+            $answers = $request->input('answers');
+            if(is_string($answers)){
+                $answers = json_decode($answers, true);
+            }
+            if(!is_array($answers)){
+                $answers = [];
+            }
+            $check = self::verifyAnswers($hasAdmin->admin_id, $answers);
+            if($check !== true){
+                self::bumpChallenge($key, $ctx);
+                return $this->error($check);
+            }
+        }
+
+        Cache::forget($key);
+        return $this->issueLoginToken($hasAdmin, '', $request);
+    }
+
+    /**
+     * challenge 失敗次數累加
+     * @param string $key
+     * @param array $ctx
+     */
+    private static function bumpChallenge($key, $ctx){
+        $ctx['attempts'] = (int)($ctx['attempts'] ?? 0) + 1;
+        $remain = max(1, 600 - (time() - (int)($ctx['issued'] ?? time())));
+        Cache::put($key, $ctx, $remain);
+    }
+
+    /**
+     * 簽發登錄 token（密碼升級、token 落庫、寫成功日誌）
+     * @param Admins $hasAdmin
+     * @param string $plainPassword 舊 MD5 升級用，傳空則不升級
+     * @param Request $request
+     * @return array
+     */
+    private function issueLoginToken($hasAdmin, $plainPassword, Request $request){
         // 舊 MD5 密碼在登錄成功時自動升級為 bcrypt
-        if(!self::isBcryptHash((string)$hasAdmin->password)){
-            Admins::where('admin_id',$hasAdmin->admin_id)->update(['password'=>Hash::make($password)]);
+        if($plainPassword !== '' && !self::isBcryptHash((string)$hasAdmin->password)){
+            Admins::where('admin_id',$hasAdmin->admin_id)->update(['password'=>Hash::make($plainPassword)]);
         }
 
         $token = AdminTokenController::createToken($hasAdmin['admin_id'], "");
@@ -240,9 +552,8 @@ class AdminsController extends Controller
         $addAdminLog = AdminLog::insert($adminLog);
         if($state && $addAdminLog){
             return $this->success(__('web.success'),['token'=>$token]);
-        }else{
-            return $this->error();
         }
+        return $this->error();
     }
 
     /**
@@ -422,6 +733,146 @@ class AdminsController extends Controller
         }else{
             return $this->error(__('web.edit_fail'));
         }
+    }
+
+    /**
+     * 獲取當前登錄管理員的個人資料（含安全問題）
+     * @param Request $request
+     * @return array
+     */
+    public function getAdminProfileWeb(Request $request){
+        $token = $request->header('TOKEN');
+        $admin = Admins::where('token',hash('sha256',$token))->first();
+        if(empty($admin)){
+            return $this->error(__('web.login_error'));
+        }
+        $questions = [];
+        try{
+            $questions = DB::table('admin_security_question')
+                ->where('admin_id',$admin->admin_id)
+                ->where('status',1)
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->select('id','question','sort')
+                ->get();
+        }catch(\Throwable $e){
+            $questions = [];
+        }
+        return $this->success(__('web.success'), [
+            'admin_id'         => $admin->admin_id,
+            'username'         => $admin->username,
+            'email'            => (string)$admin->email,
+            'phone'            => (string)$admin->phone,
+            'questions'        => $questions,
+            'sms_enabled'      => self::adminSwitch('admin_sms_enabled'),
+            'email_enabled'    => self::adminSwitch('admin_email_enabled'),
+            'question_enabled' => self::adminSwitch('admin_question_enabled'),
+        ]);
+    }
+
+    /**
+     * 修改當前管理員綁定的手機號 / 郵箱（需當前密碼確認）
+     * @param Request $request
+     * @return array
+     */
+    public function editAdminProfileWeb(Request $request){
+        $token = $request->header('TOKEN');
+        $admin = Admins::where('token',hash('sha256',$token))->first();
+        if(empty($admin)){
+            return $this->error(__('web.login_error'));
+        }
+        $email    = trim((string)$request->input('email',''));
+        $phone    = trim((string)$request->input('phone',''));
+        $password = (string)$request->input('password','');
+        if($email === '' && $phone === ''){
+            return $this->parametersError();
+        }
+        if($password === ''){
+            return $this->error(__('web.old_password_error'));
+        }
+        if(!self::checkAdminPassword($admin, $password)){
+            return $this->error(__('web.old_password_error'));
+        }
+        if($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)){
+            return $this->error(__('web.email_format_error'));
+        }
+        if($phone !== '' && !preg_match('/^[4-9]\d{7}$/', $phone)){
+            return $this->error(__('web.sms_phone_invalid'));
+        }
+        $update = [];
+        if($email !== '') $update['email'] = $email;
+        if($phone !== '') $update['phone'] = $phone;
+        $state = Admins::where('admin_id',$admin->admin_id)->update($update);
+        if($state === false){
+            return $this->error(__('web.edit_fail'));
+        }
+        return $this->success(__('web.edit_success'));
+    }
+
+    /**
+     * 保存當前管理員的安全問題（全量覆蓋，可多個）
+     * @param Request $request
+     * @return array
+     */
+    public function saveAdminQuestionWeb(Request $request){
+        $token = $request->header('TOKEN');
+        $admin = Admins::where('token',hash('sha256',$token))->first();
+        if(empty($admin)){
+            return $this->error(__('web.login_error'));
+        }
+        $password = (string)$request->input('password','');
+        if($password === '' || !self::checkAdminPassword($admin, $password)){
+            return $this->error(__('web.old_password_error'));
+        }
+        $questions = $request->input('questions');
+        if(is_string($questions)){
+            $questions = json_decode($questions, true);
+        }
+        if(!is_array($questions)){
+            return $this->parametersError();
+        }
+        if(count($questions) > 10){
+            return $this->error(__('web.admin_question_limit'));
+        }
+
+        $rows = [];
+        $now  = date('Y-m-d H:i:s');
+        foreach(array_values($questions) as $i => $q){
+            $text   = trim((string)($q['question'] ?? ''));
+            $answer = trim((string)($q['answer'] ?? ''));
+            if($text === ''){
+                continue;
+            }
+            if(mb_strlen($text) > 255){
+                return $this->error(__('web.admin_question_too_long'));
+            }
+            if($answer === ''){
+                return $this->error(__('web.admin_question_answer_required'));
+            }
+            $rows[] = [
+                'admin_id'    => $admin->admin_id,
+                'question'    => $text,
+                'answer_hash' => Hash::make(self::normalizeAnswer($answer)),
+                'sort'        => $i,
+                'status'      => 1,
+                'created_at'  => $now,
+                'updated_at'  => $now,
+            ];
+        }
+        if(empty($rows)){
+            return $this->error(__('web.admin_question_required'));
+        }
+
+        DB::beginTransaction();
+        try{
+            DB::table('admin_security_question')->where('admin_id',$admin->admin_id)->delete();
+            DB::table('admin_security_question')->insert($rows);
+            DB::commit();
+        }catch(\Throwable $e){
+            DB::rollBack();
+            return $this->error(__('web.edit_fail'), $e->getMessage());
+        }
+        return $this->success(__('web.edit_success'));
     }
 
     /**

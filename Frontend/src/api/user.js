@@ -25,6 +25,50 @@ export function sendLoginSmsCode(data) {
   })
 }
 
+// 第二階段：發送短信/郵箱驗證碼
+export function sendVerifyCode(data) {
+  return request({
+    url: '/sendAdminVerifyCode',
+    method: 'post',
+    data
+  })
+}
+
+// 第二階段：提交二次驗證完成登錄
+export function verifyLogin(data) {
+  return request({
+    url: '/AdminVerifyLogin',
+    method: 'post',
+    data
+  })
+}
+
+// 個人中心：獲取資料
+export function getAdminProfile() {
+  return request({
+    url: '/getAdminProfileWeb',
+    method: 'get'
+  })
+}
+
+// 個人中心：修改綁定手機/郵箱
+export function editAdminProfile(data) {
+  return request({
+    url: '/editAdminProfileWeb',
+    method: 'post',
+    data
+  })
+}
+
+// 個人中心：保存安全問題（多個）
+export function saveAdminQuestion(data) {
+  return request({
+    url: '/saveAdminQuestionWeb',
+    method: 'post',
+    data
+  })
+}
+
 export function getInfo() {
   return request({
     url: '/getAdminInfoWeb',

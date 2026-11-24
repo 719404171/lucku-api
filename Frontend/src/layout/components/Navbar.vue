@@ -31,6 +31,11 @@
               {{ $t('navbar.profile') }}
             </el-dropdown-item>
           </router-link> -->
+          <router-link to="/admin/profile">
+            <el-dropdown-item>
+              個人中心
+            </el-dropdown-item>
+          </router-link>
           <router-link to="/">
             <el-dropdown-item>
               {{ $t('navbar.dashboard') }}

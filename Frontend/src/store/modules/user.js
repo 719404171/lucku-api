@@ -36,18 +36,32 @@ const mutations = {
 }
 
 const actions = {
-  // user login
+  // user login（第一階段：帳號密碼）
   login({ commit }, userInfo) {
-    const { username, password, sms_code } = userInfo
+    const { username, password } = userInfo
     return new Promise((resolve, reject) => {
-      login({ username: username.trim(), password: password, sms_code: sms_code || '' }).then(response => {
+      login({ username: username.trim(), password }).then(response => {
         const { results } = response
+        // 需要二次驗證：把 challenge 信息交回登錄頁
+        if (results && results.need_verify) {
+          resolve(results)
+          return
+        }
         commit('SET_TOKEN', results.token)
         setToken(results.token)
-        resolve()
+        resolve({})
       }).catch(error => {
         reject(error)
       })
+    })
+  },
+
+  // 二次驗證通過後寫入 token
+  loginByToken({ commit }, token) {
+    return new Promise(resolve => {
+      commit('SET_TOKEN', token)
+      setToken(token)
+      resolve()
     })
   },
 
