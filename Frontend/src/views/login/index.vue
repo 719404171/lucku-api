@@ -51,13 +51,16 @@
 
     <!-- 第二步：安全驗證（短信 / 郵箱 / 安全問題可同時開啟） -->
     <div v-else class="login-form verify-form">
-      <div class="logo-container"><img alt="logo" :src="logo"></div>
+      <div class="verify-steps">
+        <span class="vs-item is-done"><i class="el-icon-check" />帳號密碼</span>
+        <span class="vs-line" />
+        <span class="vs-item is-active">安全驗證</span>
+      </div>
 
       <div class="verify-head">
-        <div class="verify-badge"><i class="el-icon-lock" /></div>
+        <div class="logo-container"><img alt="logo" :src="logo"></div>
         <h3 class="verify-title">安全驗證</h3>
-        <p class="verify-sub">當前帳號：{{ maskedUsername }}</p>
-        <span class="verify-step">第 2 步 / 共 2 步</span>
+        <p class="verify-sub">當前帳號 <b>{{ maskedUsername }}</b>，請完成以下驗證</p>
       </div>
 
       <div class="verify-body">
@@ -70,20 +73,21 @@
               <div class="verify-desc">驗證碼將發送至綁定手機 {{ challenge.phone_mask || '-' }}</div>
             </div>
           </div>
-          <el-input
-            v-model="verifyForm.sms_code"
-            placeholder="請輸入 6 位短信驗證碼"
-            maxlength="6"
-            class="verify-input"
-          >
+          <div class="code-row">
+            <el-input
+              v-model="verifyForm.sms_code"
+              placeholder="請輸入 6 位短信驗證碼"
+              maxlength="6"
+              class="verify-input"
+              @keyup.enter.native="handleVerify"
+            />
             <el-button
-              slot="append"
               class="code-btn"
               :loading="smsSending"
               :disabled="smsCountdown > 0 || smsSending"
               @click.native.prevent="handleSendCode('sms')"
             >{{ smsCountdown > 0 ? smsCountdown + 's' : '獲取驗證碼' }}</el-button>
-          </el-input>
+          </div>
           <div v-if="smsTip" class="verify-tip"><i class="el-icon-success" />{{ smsTip }}</div>
         </div>
 
@@ -96,20 +100,21 @@
               <div class="verify-desc">驗證碼將發送至綁定郵箱 {{ challenge.email_mask || '-' }}</div>
             </div>
           </div>
-          <el-input
-            v-model="verifyForm.email_code"
-            placeholder="請輸入 6 位郵箱驗證碼"
-            maxlength="6"
-            class="verify-input"
-          >
+          <div class="code-row">
+            <el-input
+              v-model="verifyForm.email_code"
+              placeholder="請輸入 6 位郵箱驗證碼"
+              maxlength="6"
+              class="verify-input"
+              @keyup.enter.native="handleVerify"
+            />
             <el-button
-              slot="append"
               class="code-btn"
               :loading="emailSending"
               :disabled="emailCountdown > 0 || emailSending"
               @click.native.prevent="handleSendCode('email')"
             >{{ emailCountdown > 0 ? emailCountdown + 's' : '獲取驗證碼' }}</el-button>
-          </el-input>
+          </div>
           <div class="verify-hint"><i class="el-icon-info" />驗證碼 10 分鐘內有效，若未收到請檢查垃圾郵件</div>
           <div v-if="emailTip" class="verify-tip"><i class="el-icon-success" />{{ emailTip }}</div>
         </div>
@@ -129,13 +134,14 @@
               v-model="verifyForm.answers[q.id]"
               placeholder="請輸入該問題的答案"
               class="verify-input"
+              @keyup.enter.native="handleVerify"
             />
           </div>
         </div>
       </div>
 
       <div class="verify-actions">
-        <el-button :loading="verifying" type="primary" class="verify-submit" @click.native.prevent="handleVerify">完成驗證並登錄</el-button>
+        <el-button :loading="verifying" type="primary" class="verify-submit" @click.native.prevent="handleVerify">驗證並登錄</el-button>
         <div class="verify-back" @click="backToLogin"><i class="el-icon-back" />返回重新輸入帳號密碼</div>
       </div>
     </div>
@@ -499,10 +505,16 @@ $light_gray:#eee;
 
   /* ===== 第二步：安全驗證 ===== */
   .verify-form {
-    width: 480px;
-    padding: 60px 35px 40px;
-    max-height: 100vh;
+    width: 460px;
+    padding: 28px 32px 26px;
+    margin: 5vh auto 40px;
+    max-height: calc(100vh - 10vh);
     overflow-y: auto;
+    background: rgba(18, 27, 40, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(8px);
 
     &::-webkit-scrollbar {
       width: 6px;
@@ -513,52 +525,83 @@ $light_gray:#eee;
       border-radius: 3px;
     }
 
-    .logo-container {
-      margin-bottom: 22px;
+    .verify-steps {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 12px;
+
+      .vs-item {
+        display: inline-flex;
+        align-items: center;
+        color: $dark_gray;
+
+        &.is-done {
+          color: #67c23a;
+
+          i {
+            margin-right: 4px;
+            font-size: 13px;
+          }
+        }
+
+        &.is-active {
+          color: #fff;
+          font-weight: 600;
+
+          &::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            margin-right: 6px;
+            border-radius: 50%;
+            background: #409eff;
+            box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.18);
+          }
+        }
+      }
+
+      .vs-line {
+        width: 46px;
+        height: 1px;
+        margin: 0 12px;
+        background: linear-gradient(90deg, rgba(103, 194, 58, 0.6), rgba(64, 158, 255, 0.6));
+      }
     }
 
     .verify-head {
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 22px;
 
-      .verify-badge {
-        width: 46px;
-        height: 46px;
-        margin: 0 auto 12px;
-        border-radius: 50%;
-        background: rgba(64, 158, 255, 0.14);
-        border: 1px solid rgba(64, 158, 255, 0.35);
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      .logo-container {
+        margin-bottom: 14px;
 
-        i {
-          font-size: 22px;
-          color: #409eff;
+        img {
+          width: 54px;
+          height: 54px;
+          padding: 7px;
+          border-radius: 12px;
         }
       }
 
       .verify-title {
-        font-size: 24px;
+        font-size: 22px;
         color: $light_gray;
-        margin: 0 0 8px;
-        font-weight: bold;
+        margin: 0 0 6px;
+        font-weight: 600;
       }
 
       .verify-sub {
-        margin: 0 0 10px;
+        margin: 0;
         font-size: 13px;
         color: $dark_gray;
-      }
+        line-height: 1.6;
 
-      .verify-step {
-        display: inline-block;
-        padding: 2px 12px;
-        font-size: 12px;
-        color: #409eff;
-        background: rgba(64, 158, 255, 0.12);
-        border: 1px solid rgba(64, 158, 255, 0.3);
-        border-radius: 10px;
+        b {
+          color: #d7e1ec;
+          font-weight: 600;
+        }
       }
     }
 
@@ -567,11 +610,17 @@ $light_gray:#eee;
     }
 
     .verify-block {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      padding: 16px 18px 18px;
-      margin-bottom: 14px;
+      background: rgba(255, 255, 255, 0.045);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      transition: background 0.2s, border-color 0.2s;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.16);
+      }
 
       &.is-sms {
         border-left: 3px solid rgba(64, 158, 255, 0.85);
@@ -657,58 +706,67 @@ $light_gray:#eee;
 
       .verify-input {
         width: 100% !important;
-        height: 44px;
 
         ::v-deep .el-input__inner {
           height: 44px;
           line-height: 44px;
           padding: 0 14px;
-          background: rgba(255, 255, 255, 0.07);
+          background: rgba(255, 255, 255, 0.06);
           border: 1px solid rgba(255, 255, 255, 0.14);
-          border-right: 0;
-          border-radius: 6px 0 0 6px;
+          border-radius: 8px;
           color: #fff;
           font-size: 14px;
+          transition: border-color 0.2s, box-shadow 0.2s;
 
           &::placeholder {
-            color: rgba(255, 255, 255, 0.35);
+            color: rgba(255, 255, 255, 0.32);
           }
 
           &:focus {
             border-color: #409eff;
+            box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.12);
           }
         }
+      }
 
-        ::v-deep .el-input-group__append {
+      .code-row {
+        display: flex;
+        align-items: center;
+
+        .verify-input {
+          flex: 1;
+          min-width: 0;
+          width: auto !important;
+        }
+
+        .code-btn {
+          flex: none;
+          width: 124px;
+          height: 44px;
+          margin-left: 10px;
           padding: 0;
-          background: transparent;
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          border-left: 0;
-          border-radius: 0 6px 6px 0;
-          overflow: hidden;
+          border: 0;
+          border-radius: 8px;
+          background: linear-gradient(135deg, #409eff, #2f7fe0);
+          color: #fff;
+          font-size: 13px;
+          font-weight: 500;
+          box-shadow: 0 6px 14px rgba(64, 158, 255, 0.25);
+          transition: background 0.2s, box-shadow 0.2s;
 
-          .code-btn {
-            min-width: 112px;
-            height: 42px;
-            padding: 0 14px;
-            border: 0;
-            border-radius: 0;
-            background: #409eff;
+          &:hover,
+          &:focus {
+            background: linear-gradient(135deg, #5aa8ff, #3a8bea);
             color: #fff;
-            font-size: 13px;
+            box-shadow: 0 8px 18px rgba(64, 158, 255, 0.35);
+          }
 
-            &:hover,
-            &:focus {
-              background: #66b1ff;
-              color: #fff;
-            }
-
-            &.is-disabled,
-            &.is-disabled:hover,
-            &.is-disabled:focus {
-              background: rgba(255, 255, 255, 0.06);
-              color: rgba(255, 255, 255, 0.35);
-            }
+          &.is-disabled,
+          &.is-disabled:hover,
+          &.is-disabled:focus {
+            background: rgba(255, 255, 255, 0.07);
+            color: rgba(255, 255, 255, 0.4);
+            box-shadow: none;
           }
         }
       }
@@ -744,13 +802,8 @@ $light_gray:#eee;
         .question-text {
           color: $light_gray;
           font-size: 13px;
-          margin-bottom: 6px;
+          margin-bottom: 8px;
           line-height: 1.5;
-        }
-
-        .verify-input ::v-deep .el-input__inner {
-          border-right: 1px solid rgba(255, 255, 255, 0.14);
-          border-radius: 6px;
         }
       }
     }
@@ -758,26 +811,58 @@ $light_gray:#eee;
     .verify-actions {
       .verify-submit {
         width: 100%;
-        height: 44px;
+        height: 46px;
         font-size: 15px;
-        border-radius: 6px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        border: 0;
+        border-radius: 9px;
+        background: linear-gradient(135deg, #3a8ee6, #1f6fd0);
+        box-shadow: 0 10px 24px rgba(31, 111, 208, 0.35);
+        transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
+
+        &:hover,
+        &:focus {
+          background: linear-gradient(135deg, #4c9bef, #2b7cdd);
+          box-shadow: 0 12px 28px rgba(31, 111, 208, 0.45);
+          transform: translateY(-1px);
+          color: #fff;
+        }
+
+        &:active {
+          transform: translateY(0);
+        }
       }
 
       .verify-back {
         text-align: center;
-        margin-top: 14px;
+        margin-top: 16px;
         font-size: 13px;
         color: $dark_gray;
         cursor: pointer;
         user-select: none;
+        transition: color 0.2s;
 
         &:hover {
-          color: #409eff;
+          color: #66b1ff;
         }
 
         i {
           margin-right: 4px;
         }
+      }
+    }
+
+    @media (max-width: 560px) {
+      width: calc(100% - 24px);
+      margin: 2vh auto 20px;
+      padding: 22px 16px;
+      max-height: none;
+      border-radius: 12px;
+
+      .code-row .code-btn {
+        width: 108px;
+        font-size: 12px;
       }
     }
   }

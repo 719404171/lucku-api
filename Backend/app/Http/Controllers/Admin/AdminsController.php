@@ -91,14 +91,14 @@ class AdminsController extends Controller
         if($challenge === '' || !in_array($channel, ['sms','email'], true)){
             return $this->parametersError();
         }
-        $ctx = Cache::get(self::challengeKey($challenge));
-        if(empty($ctx)){
+        $ctx = self::findChallenge($challenge);
+        if($ctx === null){
             return $this->error(__('web.verify_expired'));
         }
-        if(!in_array($channel, $ctx['methods'] ?? [], true)){
+        if(!in_array($channel, $ctx->methods, true)){
             return $this->error(__('web.verify_channel_off'));
         }
-        $hasAdmin = Admins::where('admin_id',$ctx['admin_id'])->where('status',1)->first();
+        $hasAdmin = Admins::where('admin_id',$ctx->admin_id)->where('status',1)->first();
         if(empty($hasAdmin)){
             return $this->error(__('web.login_error'));
         }
@@ -207,12 +207,59 @@ class AdminsController extends Controller
     }
 
     /**
-     * challenge 緩存 key
+     * 寫入登錄 challenge（落庫，避免依賴緩存配置）
      * @param string $challenge
-     * @return string
+     * @param array $data
      */
-    private static function challengeKey($challenge){
-        return 'admin_login_challenge:' . md5((string)$challenge);
+    private static function createChallenge($challenge, array $data){
+        $now = date('Y-m-d H:i:s');
+        // 順帶清理過期記錄
+        DB::table('admin_login_challenge')->where('expire_at','<',$now)->delete();
+        DB::table('admin_login_challenge')->insert([
+            'challenge_hash' => hash('sha256',(string)$challenge),
+            'admin_id'       => (int)($data['admin_id'] ?? 0),
+            'username'       => (string)($data['username'] ?? ''),
+            'methods'        => implode(',', (array)($data['methods'] ?? [])),
+            'question_id'    => (int)($data['question_id'] ?? 0),
+            'attempts'       => 0,
+            'ip'             => (string)($data['ip'] ?? ''),
+            'expire_at'      => date('Y-m-d H:i:s', time() + (int)($data['ttl'] ?? 600)),
+            'created_at'     => $now,
+            'updated_at'     => $now,
+        ]);
+    }
+
+    /**
+     * 讀取 challenge，不存在或已過期返回 null
+     * @param string $challenge
+     * @return object|null
+     */
+    private static function findChallenge($challenge){
+        $row = DB::table('admin_login_challenge')
+            ->where('challenge_hash',hash('sha256',(string)$challenge))
+            ->first();
+        if(empty($row)){
+            return null;
+        }
+        if(empty($row->expire_at) || strtotime($row->expire_at) < time()){
+            DB::table('admin_login_challenge')->where('id',$row->id)->delete();
+            return null;
+        }
+        $row->admin_id    = (int)$row->admin_id;
+        $row->question_id = (int)$row->question_id;
+        $row->attempts    = (int)$row->attempts;
+        $row->methods     = array_values(array_filter(explode(',', (string)$row->methods)));
+        return $row;
+    }
+
+    /**
+     * 刪除 challenge
+     * @param string $challenge
+     */
+    private static function dropChallenge($challenge){
+        DB::table('admin_login_challenge')
+            ->where('challenge_hash',hash('sha256',(string)$challenge))
+            ->delete();
     }
 
     /**
@@ -415,15 +462,14 @@ class AdminsController extends Controller
 
         // 生成一次性 challenge，10 分鐘內有效
         $challenge = bin2hex(random_bytes(24));
-        Cache::put(self::challengeKey($challenge), [
+        self::createChallenge($challenge, [
             'admin_id'    => $hasAdmin->admin_id,
             'username'    => $hasAdmin->username,
             'methods'     => $methods,
             'question_id' => $questionId,
-            'attempts'    => 0,
             'ip'          => (string)$request->ip(),
-            'issued'      => time(),
-        ], 600);
+            'ttl'         => 600,
+        ]);
 
         return $this->success(__('web.success'), [
             'need_verify'     => true,
@@ -446,24 +492,23 @@ class AdminsController extends Controller
         if($challenge === ''){
             return $this->parametersError();
         }
-        $key = self::challengeKey($challenge);
-        $ctx = Cache::get($key);
-        if(empty($ctx)){
+        $ctx = self::findChallenge($challenge);
+        if($ctx === null){
             return $this->error(__('web.verify_expired'));
         }
-        if((int)($ctx['attempts'] ?? 0) >= 10){
-            Cache::forget($key);
-            self::writeLoginFailLog($request, $ctx['username'] ?? '', __('web.verify_too_many'));
+        if($ctx->attempts >= 10){
+            self::dropChallenge($challenge);
+            self::writeLoginFailLog($request, (string)$ctx->username, __('web.verify_too_many'));
             return $this->error(__('web.verify_too_many'));
         }
 
-        $hasAdmin = Admins::where('admin_id',$ctx['admin_id'])->where('status',1)->first();
+        $hasAdmin = Admins::where('admin_id',$ctx->admin_id)->where('status',1)->first();
         if(empty($hasAdmin)){
-            Cache::forget($key);
+            self::dropChallenge($challenge);
             return $this->error(__('web.login_error'));
         }
 
-        $methods = $ctx['methods'] ?? [];
+        $methods = $ctx->methods;
 
         if(in_array('sms',$methods,true)){
             $smsCode = trim((string)$request->input('sms_code'));
@@ -472,7 +517,7 @@ class AdminsController extends Controller
             }
             $check = self::verifyCode($hasAdmin->admin_id, 'sms', $smsCode);
             if($check !== true){
-                self::bumpChallenge($key, $ctx);
+                self::bumpChallenge($challenge);
                 return $this->error($check);
             }
         }
@@ -484,7 +529,7 @@ class AdminsController extends Controller
             }
             $check = self::verifyCode($hasAdmin->admin_id, 'email', $emailCode);
             if($check !== true){
-                self::bumpChallenge($key, $ctx);
+                self::bumpChallenge($challenge);
                 return $this->error($check);
             }
         }
@@ -497,26 +542,25 @@ class AdminsController extends Controller
             if(!is_array($answers)){
                 $answers = [];
             }
-            $check = self::verifyAnswers($hasAdmin->admin_id, (int)($ctx['question_id'] ?? 0), $answers);
+            $check = self::verifyAnswers($hasAdmin->admin_id, $ctx->question_id, $answers);
             if($check !== true){
-                self::bumpChallenge($key, $ctx);
+                self::bumpChallenge($challenge);
                 return $this->error($check);
             }
         }
 
-        Cache::forget($key);
+        self::dropChallenge($challenge);
         return $this->issueLoginToken($hasAdmin, '', $request);
     }
 
     /**
      * challenge 失敗次數累加
-     * @param string $key
-     * @param array $ctx
+     * @param string $challenge
      */
-    private static function bumpChallenge($key, $ctx){
-        $ctx['attempts'] = (int)($ctx['attempts'] ?? 0) + 1;
-        $remain = max(1, 600 - (time() - (int)($ctx['issued'] ?? time())));
-        Cache::put($key, $ctx, $remain);
+    private static function bumpChallenge($challenge){
+        DB::table('admin_login_challenge')
+            ->where('challenge_hash',hash('sha256',(string)$challenge))
+            ->increment('attempts');
     }
 
     /**
