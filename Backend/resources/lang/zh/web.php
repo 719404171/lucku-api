@@ -41,6 +41,7 @@ return [
     'login_success' => '登录成功！！',
     'login_error' => '用户名或密码错误！！',
     'login_locked' => '登录失败次数过多，请 10 分钟后再试！！',
+    'login_config_error' => '登录配置异常，请联系系统管理员！！',
     'sms_not_enabled' => '短信验证未启用！！',
     'sms_phone_invalid' => '该账号未绑定有效的香港手机号，请先在管理员管理中绑定后再登录！！',
     'sms_code_required' => '请先获取短信验证码！！',

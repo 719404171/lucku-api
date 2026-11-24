@@ -27,6 +27,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use OSS\Core\OssException;
 use OSS\OssClient;
 
@@ -360,18 +361,26 @@ class AdminsController extends Controller
     }
 
     /**
-     * 後台登錄驗證開關（後台設置頁控制）
-     * 表/字段未就緒時按關閉處理，避免登錄頁不可用
+     * 讀取後台登錄驗證開關（後台設置頁控制）
      * @param string $column
+     * @param bool $failClosed 讀取異常時是否拋出（登錄場景用，避免驗證被靜默關閉）
      * @return bool
      */
-    private static function adminSwitch($column){
+    private static function adminSwitch($column, $failClosed = false){
         try{
-            return (int)DB::table('shop_setting')
+            $value = DB::table('shop_setting')
                 ->where('shop_status','<>',-1)
                 ->orderBy('shop_id','desc')
-                ->value($column) === 1;
+                ->value($column);
+            // 欄位不存在或無配置記錄時 value() 返回 null，按配置異常處理
+            if($value === null){
+                throw new \RuntimeException('admin switch not found: ' . $column);
+            }
+            return (int)$value === 1;
         }catch(\Throwable $e){
+            if($failClosed){
+                throw $e;
+            }
             return false;
         }
     }
@@ -417,11 +426,16 @@ class AdminsController extends Controller
             Admins::where('admin_id',$hasAdmin->admin_id)->update(['password'=>Hash::make($password)]);
         }
 
-        // 收集已開啟的二次驗證方式
-        $methods = [];
-        if(self::adminSwitch('admin_sms_enabled'))      $methods[] = 'sms';
-        if(self::adminSwitch('admin_email_enabled'))    $methods[] = 'email';
-        if(self::adminSwitch('admin_question_enabled')) $methods[] = 'question';
+        // 收集已開啟的二次驗證方式（配置讀取失敗時拒絕登錄，避免驗證被靜默關閉）
+        try{
+            $methods = [];
+            if(self::adminSwitch('admin_sms_enabled', true))      $methods[] = 'sms';
+            if(self::adminSwitch('admin_email_enabled', true))    $methods[] = 'email';
+            if(self::adminSwitch('admin_question_enabled', true)) $methods[] = 'question';
+        }catch(\Throwable $e){
+            Log::error('admin login switch read failed: ' . $e->getMessage());
+            return $this->error(__('web.login_config_error'));
+        }
 
         if(empty($methods)){
             return $this->issueLoginToken($hasAdmin, $password, $request);
@@ -498,7 +512,7 @@ class AdminsController extends Controller
         }
         if($ctx->attempts >= 10){
             self::dropChallenge($challenge);
-            self::writeLoginFailLog($request, (string)$ctx->username, __('web.verify_too_many'));
+            self::writeLoginFailLog($request, (string)$ctx->username, __('web.verify_too_many'), $ctx->admin_id);
             return $this->error(__('web.verify_too_many'));
         }
 
@@ -506,6 +520,22 @@ class AdminsController extends Controller
         if(empty($hasAdmin)){
             self::dropChallenge($challenge);
             return $this->error(__('web.login_error'));
+        }
+
+        // 二次驗證全局限流：同一管理員 10 分鐘最多失敗 20 次，同一 IP 最多 40 次
+        $windowStart = date('Y-m-d H:i:s', time() - 600);
+        $adminFails = AdminLog::where('login_admin_id',$hasAdmin->admin_id)
+            ->where('login_status',0)
+            ->where('created_at','>=',$windowStart)
+            ->count();
+        $ipFails = AdminLog::where('login_ip',(string)$request->ip())
+            ->where('login_status',0)
+            ->where('created_at','>=',$windowStart)
+            ->count();
+        if($adminFails >= 20 || $ipFails >= 40){
+            self::dropChallenge($challenge);
+            self::writeLoginFailLog($request, (string)$ctx->username, __('web.verify_too_many'), $hasAdmin->admin_id);
+            return $this->error(__('web.verify_too_many'));
         }
 
         $methods = $ctx->methods;
@@ -518,6 +548,7 @@ class AdminsController extends Controller
             $check = self::verifyCode($hasAdmin->admin_id, 'sms', $smsCode);
             if($check !== true){
                 self::bumpChallenge($challenge);
+                self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
                 return $this->error($check);
             }
         }
@@ -530,6 +561,7 @@ class AdminsController extends Controller
             $check = self::verifyCode($hasAdmin->admin_id, 'email', $emailCode);
             if($check !== true){
                 self::bumpChallenge($challenge);
+                self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
                 return $this->error($check);
             }
         }
@@ -545,6 +577,7 @@ class AdminsController extends Controller
             $check = self::verifyAnswers($hasAdmin->admin_id, $ctx->question_id, $answers);
             if($check !== true){
                 self::bumpChallenge($challenge);
+                self::writeLoginFailLog($request, (string)$ctx->username, $check, $hasAdmin->admin_id);
                 return $this->error($check);
             }
         }
@@ -630,10 +663,10 @@ class AdminsController extends Controller
      * @param string $username
      * @param string $msg
      */
-    private static function writeLoginFailLog(Request $request, $username, $msg){
+    private static function writeLoginFailLog(Request $request, $username, $msg, $adminId = 0){
         try {
             DB::table('admin_log')->insert([
-                'login_admin_id'   => 0,
+                'login_admin_id'   => (int)$adminId,
                 'login_admin_name' => mb_substr((string)$username, 0, 250),
                 'login_ip'         => (string)$request->ip(),
                 'login_status'     => 0,

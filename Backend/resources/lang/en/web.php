@@ -41,6 +41,7 @@ return [
     'login_success' => 'login successfully！！',
     'login_error' => 'Incorrect username or password！！',
     'login_locked' => 'Too many failed attempts. Please try again in 10 minutes！！',
+    'login_config_error' => 'Login configuration error, please contact the administrator！！',
     'sms_not_enabled' => 'SMS verification is not enabled！！',
     'sms_phone_invalid' => 'This account has no valid Hong Kong mobile number bound. Please bind one in administrator settings before login！！',
     'sms_code_required' => 'Please request an SMS verification code first！！',
