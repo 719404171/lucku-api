@@ -38,6 +38,7 @@
       :page="page"
       :column="column"
       :column-attr="{
+        card_sort_id: { width: '90px' },
         card_sort_url_single: { minWidth: '140px', showOverflowTooltip: true },
         card_sort_url_ten: { minWidth: '140px', showOverflowTooltip: true },
         card_sort_url_hundred: { minWidth: '140px', showOverflowTooltip: true },
@@ -654,6 +655,7 @@ export default {
       show: false,
       delIds: [],
       column: {
+        card_sort_id: 'classificationList.cardSortId',
         card_sort_img: 'common.image',
         card_sort_name: 'goodsCate.zh_name',
         sort: 'classificationList.sort',

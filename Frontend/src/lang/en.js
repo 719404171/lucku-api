@@ -779,6 +779,7 @@ export default {
   classificationList: {
     addClassification: 'Add Category',
     editClassification: 'Edit Category',
+    cardSortId: 'Card Pool ID',
     sort: 'Sort',
     sortPh: 'Smaller value = higher position (default 0)',
     brand: 'Brand',
@@ -964,6 +965,7 @@ export default {
     userName: 'User Name',
     cardSort: 'Card Pool',
     cardSortId: 'Card Pool ID',
+    drawPosition: 'Pool Draw No.',
     cards: 'Cards Drawn',
     cardCount: 'Cards',
     cost: 'Cost',

@@ -38,6 +38,7 @@
           :column-attr="{
             created_at: { minWidth: '150px' },
             user_id: { minWidth: '80px' },
+            draw_position_text: { minWidth: '110px' },
             cards_text: { minWidth: '220px' },
             audit_msg: { minWidth: '200px' },
             audit_advice: { minWidth: '280px' }
@@ -319,6 +320,7 @@ export default {
         user_name: 'audit.userName',
         user_email: 'common.email',
         card_sort_name: 'audit.cardSort',
+        draw_position_text: 'audit.drawPosition',
         cards_text: 'audit.cards',
         card_count: 'audit.cardCount',
         total_cost: 'audit.cost',

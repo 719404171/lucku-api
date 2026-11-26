@@ -3692,6 +3692,20 @@ export const drawAudit = {
     },
     {
       attr: {
+        label: 'audit.cardSort',
+        prop: 'card_sort_name'
+      },
+      value: '',
+      name: 'BaseInput',
+      item: {
+        attr: {
+          placeholder: 'common.enter',
+          clearable: true
+        }
+      }
+    },
+    {
+      attr: {
         label: 'audit.buildStatus',
         prop: 'status'
       },

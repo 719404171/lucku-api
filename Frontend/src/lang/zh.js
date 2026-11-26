@@ -783,6 +783,7 @@ export default {
   classificationList: {
     addClassification: '新增分类',
     editClassification: '编辑分类',
+    cardSortId: '卡池ID',
     sort: '排序',
     sortPh: '数值越小越靠前，默認 0',
     brand: '品牌',
@@ -968,6 +969,7 @@ export default {
     userName: '用户名称',
     cardSort: '卡池',
     cardSortId: '卡池ID',
+    drawPosition: '本卡池第几抽',
     cards: '抽到的卡',
     cardCount: '张数',
     cost: '应扣费',

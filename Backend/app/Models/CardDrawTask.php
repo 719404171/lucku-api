@@ -135,6 +135,8 @@ class CardDrawTask extends Base
         }
 
         $onlyAbnormal = !empty($data['only_abnormal']);
+        // 卡池名稱模糊搜索（中/英文池名任一命中即可）
+        $sortName = trim((string)($data['card_sort_name'] ?? ''));
 
         // 異常判定條件（與 PHP 端校驗保持同一口徑）
         $abnormalWhere = function ($query) {
@@ -144,18 +146,26 @@ class CardDrawTask extends Base
         };
 
         // 每次調用獨立構造查詢，避免 data / count 共用同一 builder 互相污染
-        $build = function ($abnormalOnly = false) use ($where, $time, $abnormalWhere) {
+        $build = function ($abnormalOnly = false) use ($where, $time, $abnormalWhere, $sortName) {
             $query = $this->join('users', 'users.user_id', '=', 'card_draw_tasks.user_id')
                 ->leftJoin('user_wallet_record as w', function ($join) {
                     $join->on('w.draw_task_id', '=', 'card_draw_tasks.task_id')
                         ->where('w.wallet_type', '=', 1);
                 })
+                ->leftJoin('card_sort', 'card_sort.card_sort_id', '=', 'card_draw_tasks.card_sort_id')
                 ->where($where)
                 ->where(function ($sub) use ($time) {
                     if (!empty($time) && $time['start_time'] != '') {
                         return $sub->whereBetween('card_draw_tasks.created_at', $time);
                     }
                 });
+            if ($sortName !== '') {
+                $like = '%' . $sortName . '%';
+                $query->where(function ($sub) use ($like) {
+                    $sub->where('card_sort.card_sort_name', 'like', $like)
+                        ->orWhere('card_sort.en_card_sort_name', 'like', $like);
+                });
+            }
             if ($abnormalOnly) {
                 $query->where($abnormalWhere);
             }
@@ -163,7 +173,6 @@ class CardDrawTask extends Base
         };
 
         $rows = $build($onlyAbnormal)
-            ->leftJoin('card_sort', 'card_sort.card_sort_id', '=', 'card_draw_tasks.card_sort_id')
             ->select(
                 'card_draw_tasks.task_id',
                 'card_draw_tasks.user_id',
@@ -184,7 +193,16 @@ class CardDrawTask extends Base
             ->offset($page)->limit($limit)
             ->get()->toArray();
 
+        // 本卡池第幾抽：僅對當前頁涉及的卡池計算，避免全表掃描
+        $positionMap = $this->buildDrawPositionMap(array_values(array_unique(array_filter(array_column($rows, 'card_sort_id')))));
+
         foreach ($rows as &$row) {
+            $range = $positionMap[$row['task_id']] ?? null;
+            $row['draw_position'] = $range ? $range[0] : 0;
+            $row['draw_position_end'] = $range ? $range[1] : 0;
+            $row['draw_position_text'] = $range
+                ? ($range[0] === $range[1] ? (string)$range[0] : $range[0] . '-' . $range[1])
+                : '-';
             $cards = json_decode($row['cards_json'] ?? '', true);
             $cards = is_array($cards) ? $cards : [];
             $names = array_values(array_filter(array_column($cards, 'card_name')));
@@ -229,6 +247,62 @@ class CardDrawTask extends Base
         $datas['abnormal_count'] = $build(true)->count();
         $datas['total_money'] = number_format((float)$build($onlyAbnormal)->sum('card_draw_tasks.total_cost'), 2, '.', '');
         return $datas;
+    }
+
+    /**
+     * 計算抽卡批次在「本卡池」內的序號區間（第幾抽 ~ 第幾抽）
+     * 規則：同一卡池按 created_at、task_id 升序累加每批次張數；
+     * 若卡池存在無批次記錄的歷史抽卡（drawn_total 大於批次合計），差額作為起始偏移，
+     * 與「每 N 張額外獎勵」的計數口徑保持一致。
+     * @param array $sortIds 卡池 ID 列表
+     * @return array task_id => [start, end]（1 起，閉區間）
+     */
+    private function buildDrawPositionMap(array $sortIds)
+    {
+        $sortIds = array_values(array_unique(array_map('intval', $sortIds)));
+        if (empty($sortIds) || !Schema::hasTable('card_draw_tasks')) {
+            return [];
+        }
+
+        // 張數用 PHP 解析 cards_json（部分庫版本不支持 JSON_LENGTH / JSON_VALID）
+        $tasks = DB::table('card_draw_tasks')
+            ->whereIn('card_sort_id', $sortIds)
+            ->orderBy('card_sort_id')
+            ->orderBy('created_at')
+            ->orderBy('task_id')
+            ->get(['task_id', 'card_sort_id', 'cards_json']);
+
+        $counts = [];
+        $sums = [];
+        foreach ($tasks as $t) {
+            $cards = json_decode((string)$t->cards_json, true);
+            $cnt = is_array($cards) ? count($cards) : 0;
+            $counts[(int)$t->task_id] = $cnt;
+            $sid = (int)$t->card_sort_id;
+            $sums[$sid] = ($sums[$sid] ?? 0) + $cnt;
+        }
+        $offsets = array_fill_keys($sortIds, 0);
+        if (Schema::hasColumn('card_sort', 'drawn_total')) {
+            $totals = DB::table('card_sort')->whereIn('card_sort_id', $sortIds)->pluck('drawn_total', 'card_sort_id');
+            foreach ($totals as $sid => $total) {
+                $offsets[(int)$sid] = max(0, (int)$total - (int)($sums[(int)$sid] ?? 0));
+            }
+        }
+
+        $map = [];
+        $cursors = $offsets;
+        foreach ($tasks as $t) {
+            $sid = (int)$t->card_sort_id;
+            $cnt = (int)($counts[(int)$t->task_id] ?? 0);
+            if ($cnt <= 0) {
+                continue;
+            }
+            $start = ($cursors[$sid] ?? 0) + 1;
+            $end = $start + $cnt - 1;
+            $cursors[$sid] = $end;
+            $map[(int)$t->task_id] = [$start, $end];
+        }
+        return $map;
     }
 
     /**
